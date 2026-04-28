@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chatmail</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #f5f5f5;
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+    color: #1a1a1a;
+  }
+
+  /* ===== SIDEBAR ===== */
+  .sidebar {
+    width: 300px;
+    min-width: 300px;
+    background: #fff;
+    border-right: 1px solid #e8e8e8;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-header {
+    padding: 20px 16px 12px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .sidebar-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .app-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1a1a1a;
+    letter-spacing: -0.3px;
+  }
+
+  .search-box {
+    display: flex;
+    align-items: center;
+    background: #f5f5f5;
+    border-radius: 8px;
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .search-box input {
+    border: none;
+    background: none;
+    outline: none;
+    font-size: 14px;
+    color: #1a1a1a;
+    width: 100%;
+  }
+
+  .search-box input::placeholder { color: #aaa; }
+  .search-icon { color: #aaa; font-size: 14px; }
+
+  .contact-list { flex: 1; overflow-y: auto; }
+
+  .contact-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    cursor: pointer;
+    gap: 12px;
+    transition: background 0.1s;
+    position: relative;
+  }
+
+  .contact-item:hover { background: #f9f9f9; }
+  .contact-item.active { background: #f0f4ff; }
+
+  .avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    flex-shrink: 0;
+  }
+
+  .contact-info { flex: 1; min-width: 0; }
+
+  .contact-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1a1a1a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .contact-preview {
+    font-size: 12px;
+    color: #888;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .contact-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .contact-time { font-size: 11px; color: #aaa; }
+
+  .unread-badge {
+    background: #4f6ef7;
+    color: #fff;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 6px;
+    min-width: 18px;
+    text-align: center;
+  }
+
+  /* ===== EMPTY / LOADING STATES ===== */
+  .sidebar-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    gap: 12px;
+    color: #aaa;
+    text-align: center;
+  }
+
+  .sidebar-empty p { font-size: 13px; line-height: 1.6; }
+
+  .btn-connect {
+    background: #4f6ef7;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 18px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+    margin-top: 4px;
+  }
+
+  .btn-connect:hover { background: #3d5ee0; }
+
+  /* ===== MAIN ===== */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #fafafa;
+    min-width: 0;
+  }
+
+  .chat-header {
+    background: #fff;
+    border-bottom: 1px solid #e8e8e8;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .chat-header .avatar { width: 36px; height: 36px; font-size: 14px; }
+
+  .chat-header-info { flex: 1; }
+
+  .chat-header-info h2 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a1a1a;
+  }
+
+  .chat-header-info p {
+    font-size: 12px;
+    color: #888;
+    margin-top: 1px;
+  }
+
+  /* ===== MESSAGES ===== */
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .message-group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .message-group.sent { align-items: flex-end; }
+  .message-group.received { align-items: flex-start; }
+
+  .bubble {
+    max-width: 65%;
+    padding: 10px 14px;
+    border-radius: 16px;
+    font-size: 14px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .sent .bubble {
+    background: #4f6ef7;
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+
+  .received .bubble {
+    background: #fff;
+    color: #1a1a1a;
+    border-bottom-left-radius: 4px;
+    border: 1px solid #e8e8e8;
+  }
+
+  .message-time { font-size: 11px; color: #bbb; padding: 0 4px; margin-top: 2px; }
+
+  .date-divider {
+    text-align: center;
+    font-size: 11px;
+    color: #bbb;
+    margin: 4px 0;
+    position: relative;
+  }
+
+  .date-divider::before,
+  .date-divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    width: 35%;
+    height: 1px;
+    background: #e8e8e8;
+  }
+
+  .date-divider::before { left: 0; }
+  .date-divider::after { right: 0; }
+
+  /* ===== COMPOSE ===== */
+  .compose-area {
+    background: #fff;
+    border-top: 1px solid #e8e8e8;
+    padding: 14px 24px 18px;
+  }
+
+  .ai-loading {
+    display: none;
+    font-size: 12px;
+    color: #4f6ef7;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 10px;
+  }
+
+  .ai-loading.visible { display: flex; }
+
+  .dot-anim span {
+    display: inline-block;
+    width: 5px; height: 5px;
+    background: #4f6ef7;
+    border-radius: 50%;
+    margin: 0 1px;
+    animation: bounce 1.2s infinite;
+  }
+
+  .dot-anim span:nth-child(2) { animation-delay: 0.2s; }
+  .dot-anim span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); }
+    30% { transform: translateY(-4px); }
+  }
+
+  .ai-suggestion {
+    background: #f0f4ff;
+    border: 1px solid #c7d4fd;
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    display: none;
+  }
+
+  .ai-suggestion.visible { display: block; }
+
+  .ai-suggestion-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #4f6ef7;
+    margin-bottom: 6px;
+  }
+
+  .ai-suggestion-text {
+    font-size: 14px;
+    color: #1a1a1a;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
+
+  .ai-suggestion-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  /* ===== COMPOSE BOX ===== */
+  .compose-box {
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.15s;
+    background: #fff;
+  }
+
+  .compose-box:focus-within { border-color: #4f6ef7; }
+
+  .template-block {
+    padding: 9px 14px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: #bbb;
+    white-space: pre-wrap;
+    background: #fafafa;
+    border-bottom: 1px dashed #ececec;
+    user-select: none;
+  }
+
+  .template-block.bottom {
+    border-top: 1px dashed #ececec;
+    border-bottom: none;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .template-block.hidden { display: none; }
+
+  .sig-text {
+    font-size: 13px;
+    color: #bbb;
+    white-space: pre-wrap;
+    flex: 1;
+    line-height: 1.6;
+  }
+
+  .compose-input {
+    width: 100%;
+    border: none;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    resize: none;
+    min-height: 60px;
+    max-height: 140px;
+    line-height: 1.5;
+    color: #1a1a1a;
+    background: #fff;
+  }
+
+  .compose-input::placeholder { color: #bbb; }
+  .compose-input:disabled { opacity: 0.5; }
+
+  /* ===== TOOLBAR ===== */
+  .compose-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 10px;
+  }
+
+  .tone-buttons {
+    display: flex;
+    gap: 6px;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+  }
+
+  .tone-buttons.visible { opacity: 1; pointer-events: all; }
+
+  .btn-tone {
+    background: #f0f0f0;
+    border: none;
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    color: #555;
+    white-space: nowrap;
+    transition: background 0.1s;
+  }
+
+  .btn-tone:hover { background: #e0e0e0; }
+
+  .right-actions { display: flex; gap: 8px; align-items: center; }
+
+  .btn-ai {
+    background: #f0f4ff;
+    color: #4f6ef7;
+    border: 1px solid #c7d4fd;
+    border-radius: 8px;
+    padding: 8px 13px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: background 0.1s;
+  }
+
+  .btn-ai:hover { background: #e4ecff; }
+
+  .btn-send {
+    background: #4f6ef7;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 18px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.1s;
+  }
+
+  .btn-send:hover { background: #3d5ee0; }
+
+  .btn-adopt {
+    background: #4f6ef7;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  .btn-adopt:hover { background: #3d5ee0; }
+
+  .btn-discard {
+    background: none;
+    color: #888;
+    border: 1px solid #e0e0e0;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .btn-discard:hover { background: #f5f5f5; }
+
+  /* ===== ICON BUTTONS ===== */
+  .btn-icon {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #aaa;
+    font-size: 16px;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: background 0.1s, color 0.1s;
+    line-height: 1;
+  }
+
+  .btn-icon:hover { background: #f0f0f0; color: #555; }
+
+  /* ===== SETTINGS MODAL ===== */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.25);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .modal-overlay.visible { display: flex; }
+
+  .modal {
+    background: #fff;
+    border-radius: 14px;
+    width: 460px;
+    max-width: 95vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  }
+
+  .modal-header {
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 1;
+  }
+
+  .modal-header h3 { font-size: 15px; font-weight: 600; }
+
+  .modal-body { padding: 20px; display: flex; flex-direction: column; gap: 20px; }
+
+  .modal-section label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+
+  .modal-section textarea {
+    width: 100%;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    resize: vertical;
+    min-height: 72px;
+    color: #1a1a1a;
+    line-height: 1.6;
+    transition: border-color 0.15s;
+  }
+
+  .modal-section textarea:focus { border-color: #4f6ef7; }
+
+  .modal-footer {
+    padding: 14px 20px;
+    border-top: 1px solid #f0f0f0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    position: sticky;
+    bottom: 0;
+    background: #fff;
+  }
+
+  .btn-save {
+    background: #4f6ef7;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 20px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  .btn-save:hover { background: #3d5ee0; }
+
+  .btn-cancel {
+    background: none;
+    color: #888;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .btn-cancel:hover { background: #f5f5f5; }
+
+  .sig-checkbox {
+    margin-top: 3px;
+    accent-color: #4f6ef7;
+    width: 14px;
+    height: 14px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .api-key-input {
+    width: 100%;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-family: monospace;
+    outline: none;
+    color: #1a1a1a;
+    transition: border-color 0.15s;
+  }
+
+  .api-key-input:focus { border-color: #4f6ef7; }
+  .api-key-input + .api-key-input { margin-top: 6px; }
+
+  .api-key-status {
+    font-size: 11px;
+    margin-top: 5px;
+    color: #aaa;
+  }
+
+  .api-key-status.ok { color: #2ab37a; }
+  .api-key-status.err { color: #e8605a; }
+
+  .gmail-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+
+  .btn-gmail {
+    background: #fff;
+    color: #555;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background 0.1s;
+  }
+
+  .btn-gmail:hover { background: #f5f5f5; }
+  .btn-gmail.primary { background: #4f6ef7; color: #fff; border-color: #4f6ef7; }
+  .btn-gmail.primary:hover { background: #3d5ee0; }
+
+  .modal-hint {
+    font-size: 11px;
+    color: #aaa;
+    margin-top: 6px;
+    line-height: 1.5;
+  }
+
+  .modal-hint a { color: #4f6ef7; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-title-row">
+      <div class="app-name">Chatmail</div>
+      <button class="btn-icon" onclick="openSettings()" title="設定">&#9881;</button>
+    </div>
+    <div class="search-box">
+      <span class="search-icon">&#128269;</span>
+      <input type="text" placeholder="検索" oninput="filterContacts(this.value)">
+    </div>
+  </div>
+  <div class="contact-list" id="contact-list"></div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="chat-header">
+    <div class="avatar" id="header-avatar" style="background:#4f6ef7">-</div>
+    <div class="chat-header-info">
+      <h2 id="header-name">Chatmail</h2>
+      <p id="header-email">左のリストから相手を選択</p>
+    </div>
+    <button class="btn-icon" onclick="openSettings()" title="設定">&#9881;</button>
+  </div>
+
+  <div class="messages" id="messages"></div>
+
+  <!-- COMPOSE -->
+  <div class="compose-area">
+    <div class="ai-loading" id="ai-loading">
+      <span>AIが考えています</span>
+      <div class="dot-anim"><span></span><span></span><span></span></div>
+    </div>
+
+    <div class="ai-suggestion" id="ai-suggestion">
+      <div class="ai-suggestion-label">&#10022; AI提案</div>
+      <div class="ai-suggestion-text" id="ai-suggestion-text"></div>
+      <div class="ai-suggestion-actions">
+        <button class="btn-adopt" onclick="adoptSuggestion()">これで送る</button>
+        <button class="btn-discard" onclick="discardSuggestion()">破棄</button>
+      </div>
+    </div>
+
+    <div class="compose-box">
+      <div class="template-block hidden" id="template-greeting"></div>
+      <textarea
+        class="compose-input"
+        id="compose-input"
+        placeholder="本文を入力..."
+        rows="2"
+        oninput="onInputChange(this)"
+        onkeydown="onKeyDown(event)"
+        disabled
+      ></textarea>
+      <div class="template-block bottom hidden" id="template-signature">
+        <input type="checkbox" class="sig-checkbox" id="sig-checkbox" checked onchange="updateSigVisual()">
+        <span class="sig-text" id="sig-text"></span>
+      </div>
+    </div>
+
+    <div class="compose-toolbar">
+      <div class="tone-buttons" id="tone-buttons">
+        <button class="btn-tone" onclick="adjustTone('丁寧に')">丁寧に</button>
+        <button class="btn-tone" onclick="adjustTone('フランクに')">フランクに</button>
+        <button class="btn-tone" onclick="adjustTone('短く')">短く</button>
+      </div>
+      <div class="right-actions">
+        <button class="btn-ai" id="btn-ai" onclick="triggerAI()">&#10022; AIに書かせる</button>
+        <button class="btn-send" onclick="sendMessage()">送信</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeSettings(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>設定</h3>
+      <button class="btn-icon" onclick="closeSettings()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Gmail 認証 -->
+      <div class="modal-section">
+        <label>Gmail 連携</label>
+        <input type="text"      class="api-key-input" id="modal-client-id"     placeholder="Google Client ID">
+        <input type="password"  class="api-key-input" id="modal-client-secret"  placeholder="Google Client Secret">
+        <div class="gmail-actions">
+          <button class="btn-gmail primary" id="btn-gmail-connect" onclick="connectGmail()">Gmailに接続</button>
+          <button class="btn-gmail" id="btn-gmail-signout" style="display:none" onclick="signoutGmail()">接続解除</button>
+          <button class="btn-gmail" onclick="reloadInbox()">&#8635; 更新</button>
+        </div>
+        <div class="api-key-status" id="gmail-status"></div>
+        <p class="modal-hint">
+          Google Cloud Console で「デスクトップアプリ」タイプの OAuth クライアント ID を作成し、<br>
+          リダイレクト URI に <code>http://localhost:3000/oauth/callback</code> を追加してください。<br>
+          <a onclick="openGCPHelp()">設定手順を開く &#8599;</a>
+        </p>
+      </div>
+
+      <!-- 冒頭文 -->
+      <div class="modal-section" id="greeting-section" style="display:none">
+        <label id="greeting-label">冒頭文（この相手専用）</label>
+        <textarea id="modal-greeting" placeholder="田中様&#10;いつもお世話になっております。&#10;" rows="3"></textarea>
+      </div>
+
+      <!-- 署名 -->
+      <div class="modal-section">
+        <label>署名（全メールに付加）</label>
+        <textarea id="modal-signature" placeholder="株式会社ABC&#10;営業部 山田 太郎&#10;tel: 03-xxxx-xxxx" rows="4"></textarea>
+      </div>
+
+      <!-- Claude APIキー -->
+      <div class="modal-section">
+        <label>Claude APIキー</label>
+        <input type="password" class="api-key-input" id="modal-apikey" placeholder="sk-ant-...">
+        <div class="api-key-status" id="apikey-status"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeSettings()">閉じる</button>
+      <button class="btn-save" onclick="saveSettings()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== STATE =====
+let contacts = [];         // Gmail スレッドから動的に構築
+let currentContact = null; // 選択中の contact オブジェクト
+let gmailConnected = false;
+let globalSignature = localStorage.getItem('chatmail_signature') || '';
+
+// 相手別の冒頭文は localStorage に保存（email → greeting）
+function getGreeting(email) {
+  const map = JSON.parse(localStorage.getItem('chatmail_greetings') || '{}');
+  return map[email] || '';
+}
+
+function setGreeting(email, text) {
+  const map = JSON.parse(localStorage.getItem('chatmail_greetings') || '{}');
+  map[email] = text;
+  localStorage.setItem('chatmail_greetings', JSON.stringify(map));
+}
+
+// ===== AVATAR COLOR =====
+const AVATAR_COLORS = ['#4f6ef7','#e8605a','#2ab37a','#f5a623','#9b59b6','#e67e22','#1abc9c','#e91e63'];
+function emailToColor(email) {
+  let hash = 0;
+  for (const c of email) hash = c.charCodeAt(0) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+// ===== SIDEBAR =====
+function renderContactList() {
+  const list = document.getElementById('contact-list');
+  if (contacts.length === 0) {
+    list.innerHTML = `
+      <div class="sidebar-empty">
+        <p>受信トレイが空です。</p>
+      </div>`;
+    return;
+  }
+  list.innerHTML = contacts.map((c, i) => `
+    <div class="contact-item${currentContact && currentContact.threadId === c.threadId ? ' active' : ''}"
+         data-index="${i}"
+         onclick="selectContact(${i})">
+      <div class="avatar" style="background:${emailToColor(c.email)}">${(c.name[0] || '?').toUpperCase()}</div>
+      <div class="contact-info">
+        <div class="contact-name">${esc(c.name)}</div>
+        <div class="contact-preview">${esc(c.preview || c.subject || '')}</div>
+      </div>
+      <div class="contact-meta">
+        <span class="contact-time">${esc(c.time)}</span>
+        ${c.unread ? '<span class="unread-badge">●</span>' : ''}
+      </div>
+    </div>`).join('');
+}
+
+function showSidebarEmpty(message, showConnectBtn) {
+  document.getElementById('contact-list').innerHTML = `
+    <div class="sidebar-empty">
+      <p>${message}</p>
+      ${showConnectBtn ? '<button class="btn-connect" onclick="openSettings()">Gmailに接続する</button>' : ''}
+    </div>`;
+}
+
+function filterContacts(query) {
+  const q = query.trim().toLowerCase();
+  document.querySelectorAll('#contact-list .contact-item').forEach(el => {
+    const i = parseInt(el.dataset.index, 10);
+    const c = contacts[i];
+    const match = !q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || c.subject.toLowerCase().includes(q);
+    el.style.display = match ? '' : 'none';
+  });
+}
+
+// ===== SELECT CONTACT =====
+async function selectContact(index) {
+  currentContact = contacts[index];
+
+  // ヘッダー更新
+  const c = currentContact;
+  const color = emailToColor(c.email);
+  document.getElementById('header-avatar').textContent = (c.name[0] || '?').toUpperCase();
+  document.getElementById('header-avatar').style.background = color;
+  document.getElementById('header-name').textContent = c.name;
+  document.getElementById('header-email').textContent = c.email;
+
+  // サイドバーの active 状態
+  document.querySelectorAll('#contact-list .contact-item').forEach(el => {
+    el.classList.toggle('active', parseInt(el.dataset.index, 10) === index);
+  });
+
+  // メッセージ取得
+  const msgs = document.getElementById('messages');
+  msgs.innerHTML = '<div style="text-align:center;padding:40px;color:#aaa;font-size:13px">読み込み中...</div>';
+
+  const result = await window.electronAPI.gmail.fetchMessages(c.threadId);
+  if (result.ok) {
+    renderMessages(result.messages);
+  } else {
+    msgs.innerHTML = `<div style="text-align:center;padding:40px;color:#e8605a;font-size:13px">読み込みエラー: ${esc(result.error)}</div>`;
+  }
+
+  resetCompose();
+  updateTemplateBlocks();
+}
+
+function renderMessages(messages) {
+  const msgs = document.getElementById('messages');
+  msgs.innerHTML = '';
+
+  messages.forEach(m => {
+    if (m.date) {
+      const div = document.createElement('div');
+      div.className = 'date-divider';
+      div.textContent = m.date;
+      msgs.appendChild(div);
+    }
+    const group = document.createElement('div');
+    group.className = `message-group ${m.type}`;
+    group.innerHTML = `<div class="bubble">${esc(m.text)}</div><div class="message-time">${esc(m.time)}</div>`;
+    msgs.appendChild(group);
+  });
+
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+function appendSentMessage(text) {
+  const msgs = document.getElementById('messages');
+  const now = new Date();
+  const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const group = document.createElement('div');
+  group.className = 'message-group sent';
+  group.innerHTML = `<div class="bubble">${esc(text)}</div><div class="message-time">${time}</div>`;
+  msgs.appendChild(group);
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+// ===== TEMPLATE BLOCKS =====
+function updateTemplateBlocks() {
+  if (!currentContact) return;
+  const greeting = getGreeting(currentContact.email);
+  const greetingEl = document.getElementById('template-greeting');
+  greetingEl.textContent = greeting;
+  greetingEl.classList.toggle('hidden', !greeting);
+  updateSigVisual();
+}
+
+function updateSigVisual() {
+  const sigEl = document.getElementById('template-signature');
+  const sigText = document.getElementById('sig-text');
+  sigText.textContent = globalSignature;
+  sigEl.classList.toggle('hidden', !globalSignature);
+  sigText.style.opacity = document.getElementById('sig-checkbox').checked ? '1' : '0.35';
+}
+
+// ===== COMPOSE =====
+function onInputChange(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+  const hasText = el.value.trim().length > 0;
+  document.getElementById('tone-buttons').classList.toggle('visible', hasText);
+  document.getElementById('btn-ai').textContent = hasText ? '&#10022; 整える' : '&#10022; AIに書かせる';
+}
+
+function onKeyDown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function enableCompose() {
+  document.getElementById('compose-input').disabled = false;
+}
+
+function getApiKey() {
+  return localStorage.getItem('chatmail_apikey') || '';
+}
+
+async function callClaude(system, userMsg) {
+  const key = getApiKey();
+  if (!key) { alert('設定画面でClaude APIキーを入力してください。'); return null; }
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': key,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 400,
+      system,
+      messages: [{ role: 'user', content: userMsg }]
+    })
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    alert('APIエラー: ' + (err.error?.message || res.status));
+    return null;
+  }
+  const data = await res.json();
+  return data.content[0].text.trim();
+}
+
+async function triggerAI() {
+  if (!currentContact) return;
+  const input = document.getElementById('compose-input');
+  hideSuggestion();
+  document.getElementById('ai-loading').classList.add('visible');
+
+  try {
+    let result;
+    if (input.value.trim()) {
+      result = await callClaude(
+        'あなたはビジネスメールの文章を整えるアシスタントです。与えられた文章を自然で適切な日本語ビジネスメール本文に整えてください。冒頭の挨拶や署名は含めず、本文のみを返してください。',
+        input.value.trim()
+      );
+    } else {
+      result = await callClaude(
+        'あなたはビジネスメールの返信を書くアシスタントです。相手の情報をもとに、自然で適切な返信本文のみを日本語で書いてください。冒頭の挨拶や署名は不要です。',
+        `相手：${currentContact.name}（${currentContact.email}）\n件名：${currentContact.subject}\n\n返信文を書いてください。`
+      );
+    }
+    if (result) {
+      document.getElementById('ai-suggestion-text').textContent = result;
+      document.getElementById('ai-suggestion').classList.add('visible');
+    }
+  } finally {
+    document.getElementById('ai-loading').classList.remove('visible');
+  }
+}
+
+async function adjustTone(tone) {
+  const input = document.getElementById('compose-input');
+  if (!input.value.trim()) return;
+  hideSuggestion();
+  document.getElementById('ai-loading').classList.add('visible');
+
+  const toneMap = { '丁寧に': '丁寧でフォーマルなビジネス文体', 'フランクに': 'フランクで親しみやすい文体', '短く': 'できるだけ短く簡潔な文体' };
+  try {
+    const result = await callClaude(
+      `あなたはメール文章のトーンを調整するアシスタントです。与えられたテキストを「${toneMap[tone]}」で書き直してください。本文のみを返してください。`,
+      input.value.trim()
+    );
+    if (result) {
+      document.getElementById('ai-suggestion-text').textContent = result;
+      document.getElementById('ai-suggestion').classList.add('visible');
+    }
+  } finally {
+    document.getElementById('ai-loading').classList.remove('visible');
+  }
+}
+
+function adoptSuggestion() {
+  document.getElementById('compose-input').value = document.getElementById('ai-suggestion-text').textContent;
+  onInputChange(document.getElementById('compose-input'));
+  hideSuggestion();
+  document.getElementById('compose-input').focus();
+}
+
+function discardSuggestion() { hideSuggestion(); }
+function hideSuggestion() { document.getElementById('ai-suggestion').classList.remove('visible'); }
+
+async function sendMessage() {
+  if (!currentContact) return;
+  const input = document.getElementById('compose-input');
+  const body = input.value.trim();
+  if (!body) return;
+
+  const greeting = getGreeting(currentContact.email);
+  const sigOn = document.getElementById('sig-checkbox').checked;
+  const fullText = [
+    greeting,
+    body,
+    sigOn && globalSignature ? '\n' + globalSignature : ''
+  ].join('').trim();
+
+  if (gmailConnected) {
+    const result = await window.electronAPI.gmail.send({
+      to: currentContact.email,
+      subject: currentContact.subject,
+      body: fullText,
+      threadId: currentContact.threadId,
+    });
+    if (!result.ok) {
+      alert('送信エラー: ' + result.error);
+      return;
+    }
+  }
+
+  appendSentMessage(fullText);
+  input.value = '';
+  onInputChange(input);
+  hideSuggestion();
+}
+
+function resetCompose() {
+  const input = document.getElementById('compose-input');
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('tone-buttons').classList.remove('visible');
+  document.getElementById('btn-ai').textContent = '&#10022; AIに書かせる';
+  hideSuggestion();
+  document.getElementById('ai-loading').classList.remove('visible');
+  document.getElementById('sig-checkbox').checked = true;
+}
+
+// ===== SETTINGS =====
+function openSettings() {
+  // Gmail 状態反映
+  const clientIdEl = document.getElementById('modal-client-id');
+  const clientSecretEl = document.getElementById('modal-client-secret');
+  // 現在の入力値は保持（既に入力済みの場合）
+  // 保存済みの値を反映
+  window.electronAPI.gmail.getConfig().then(cfg => {
+    clientIdEl.value = cfg.clientId || '';
+    clientSecretEl.value = '';  // Secret は表示しない
+    updateGmailStatus(cfg.isAuthenticated);
+  });
+
+  // 冒頭文
+  if (currentContact) {
+    document.getElementById('greeting-section').style.display = 'block';
+    document.getElementById('greeting-label').textContent = currentContact.name + ' への冒頭文';
+    document.getElementById('modal-greeting').value = getGreeting(currentContact.email);
+  } else {
+    document.getElementById('greeting-section').style.display = 'none';
+  }
+
+  document.getElementById('modal-signature').value = globalSignature;
+  const savedKey = getApiKey();
+  document.getElementById('modal-apikey').value = savedKey;
+  document.getElementById('apikey-status').textContent = savedKey ? '✓ 設定済み' : '';
+  document.getElementById('apikey-status').className = 'api-key-status' + (savedKey ? ' ok' : '');
+
+  document.getElementById('modal-overlay').classList.add('visible');
+}
+
+function closeSettings(e) {
+  if (e && e.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').classList.remove('visible');
+}
+
+function updateGmailStatus(connected) {
+  gmailConnected = connected;
+  const status = document.getElementById('gmail-status');
+  const connectBtn = document.getElementById('btn-gmail-connect');
+  const signoutBtn = document.getElementById('btn-gmail-signout');
+  if (connected) {
+    status.textContent = '✓ Gmail に接続済み';
+    status.className = 'api-key-status ok';
+    connectBtn.textContent = '再接続';
+    signoutBtn.style.display = '';
+  } else {
+    status.textContent = '未接続';
+    status.className = 'api-key-status';
+    connectBtn.textContent = 'Gmail に接続';
+    signoutBtn.style.display = 'none';
+  }
+}
+
+async function connectGmail() {
+  const clientId = document.getElementById('modal-client-id').value.trim();
+  const clientSecret = document.getElementById('modal-client-secret').value.trim();
+
+  if (!clientId || !clientSecret) {
+    alert('Client ID と Client Secret を入力してください。');
+    return;
+  }
+
+  await window.electronAPI.gmail.saveConfig({ clientId, clientSecret });
+
+  const status = document.getElementById('gmail-status');
+  status.textContent = 'ブラウザで認証中...';
+  status.className = 'api-key-status';
+
+  const result = await window.electronAPI.gmail.authenticate();
+  if (result.ok) {
+    updateGmailStatus(true);
+    closeSettings();
+    await loadInbox();
+  } else {
+    status.textContent = 'エラー: ' + result.error;
+    status.className = 'api-key-status err';
+  }
+}
+
+async function signoutGmail() {
+  await window.electronAPI.gmail.signout();
+  updateGmailStatus(false);
+  contacts = [];
+  currentContact = null;
+  renderContactList();
+  showSidebarEmpty('Gmail に接続すると受信トレイが表示されます。', true);
+}
+
+async function reloadInbox() {
+  closeSettings();
+  await loadInbox();
+}
+
+function openGCPHelp() {
+  window.electronAPI.openExternal('https://console.cloud.google.com/apis/credentials');
+}
+
+async function saveSettings() {
+  globalSignature = document.getElementById('modal-signature').value;
+  localStorage.setItem('chatmail_signature', globalSignature);
+
+  if (currentContact) {
+    setGreeting(currentContact.email, document.getElementById('modal-greeting').value);
+  }
+
+  const apiKey = document.getElementById('modal-apikey').value.trim();
+  if (apiKey) localStorage.setItem('chatmail_apikey', apiKey);
+
+  const clientId = document.getElementById('modal-client-id').value.trim();
+  const clientSecret = document.getElementById('modal-client-secret').value.trim();
+  if (clientId && clientSecret) {
+    await window.electronAPI.gmail.saveConfig({ clientId, clientSecret });
+  } else if (clientId) {
+    await window.electronAPI.gmail.saveConfig({ clientId });
+  }
+
+  document.getElementById('modal-overlay').classList.remove('visible');
+  updateTemplateBlocks();
+}
+
+// ===== GMAIL DATA LOADING =====
+async function loadInbox() {
+  showSidebarEmpty('受信トレイを読み込み中...', false);
+
+  const result = await window.electronAPI.gmail.fetchThreads();
+  if (!result.ok) {
+    showSidebarEmpty('読み込みエラー: ' + result.error, false);
+    return;
+  }
+
+  contacts = result.contacts;
+  renderContactList();
+
+  if (contacts.length > 0) {
+    enableCompose();
+    await selectContact(0);
+  }
+}
+
+// ===== UTIL =====
+function esc(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ===== INIT =====
+async function init() {
+  const cfg = await window.electronAPI.gmail.getConfig();
+  gmailConnected = cfg.isAuthenticated;
+
+  if (gmailConnected) {
+    await loadInbox();
+  } else {
+    showSidebarEmpty('Gmail に接続すると受信トレイが表示されます。', true);
+  }
+}
+
+init();
+</script>
+</body>
+</html>
