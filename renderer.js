@@ -379,9 +379,18 @@ function updateTemplateBlocks() {
   if (!currentContact) return;
   const greeting = getGreeting(currentContact.email);
   const greetingEl = document.getElementById('template-greeting');
-  greetingEl.textContent = greeting;
   greetingEl.classList.toggle('hidden', !greeting);
+  if (greeting) {
+    document.getElementById('greeting-text').textContent = greeting;
+    document.getElementById('greeting-checkbox').checked = true;
+    updateGreetingVisual();
+  }
   updateSigVisual();
+}
+
+function updateGreetingVisual() {
+  const text = document.getElementById('greeting-text');
+  text.style.opacity = document.getElementById('greeting-checkbox').checked ? '1' : '0.35';
 }
 
 function updateSigVisual() {
@@ -394,8 +403,6 @@ function updateSigVisual() {
 
 // ===== COMPOSE =====
 function onInputChange(el) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
   const hasText = el.value.trim().length > 0;
   document.getElementById('tone-buttons').classList.toggle('visible', hasText);
   document.getElementById('btn-ai').textContent = hasText ? '✦ 整える' : '✦ AIに書かせる';
@@ -511,12 +518,13 @@ async function sendMessage() {
   if (!body) return;
 
   const greeting = getGreeting(currentContact.email);
+  const greetingOn = document.getElementById('greeting-checkbox').checked;
   const sigOn = document.getElementById('sig-checkbox').checked;
   const fullText = [
-    greeting,
+    greetingOn && greeting ? greeting : '',
     body,
     sigOn && globalSignature ? '\n' + globalSignature : ''
-  ].join('').trim();
+  ].filter(Boolean).join('').trim();
 
   if (gmailConnected) {
     const ccRow = document.getElementById('reply-cc-row');
@@ -562,6 +570,7 @@ function resetCompose() {
   hideSuggestion();
   document.getElementById('ai-loading').classList.remove('visible');
   document.getElementById('sig-checkbox').checked = true;
+  document.getElementById('greeting-checkbox').checked = true;
   replyAttachments = [];
   renderAttachmentList('reply');
   document.getElementById('reply-cc-row').classList.add('hidden');
@@ -1167,6 +1176,72 @@ async function loadTrash() {
   if (contacts.length === 0) showSidebarEmpty('ゴミ箱は空です。', false);
 }
 
+// ===== SIDEBAR RESIZE =====
+function setupSidebarResize() {
+  const resizer = document.getElementById('sidebar-resizer');
+  const sidebar = document.querySelector('.sidebar');
+  let startX, startWidth;
+
+  resizer.addEventListener('mousedown', e => {
+    startX = e.clientX;
+    startWidth = sidebar.offsetWidth;
+    resizer.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    function onMouseMove(e) {
+      const w = Math.min(520, Math.max(200, startWidth + e.clientX - startX));
+      sidebar.style.width = w + 'px';
+    }
+    function onMouseUp() {
+      resizer.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      localStorage.setItem('chatmail_sidebar_width', sidebar.offsetWidth);
+    }
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  });
+
+  const saved = localStorage.getItem('chatmail_sidebar_width');
+  if (saved) sidebar.style.width = saved + 'px';
+}
+
+// ===== COMPOSE RESIZE =====
+function setupComposeResize() {
+  const resizer = document.getElementById('compose-resizer');
+  const compose = document.querySelector('.compose-area');
+  let startX, startWidth;
+
+  resizer.addEventListener('mousedown', e => {
+    startX = e.clientX;
+    startWidth = compose.offsetWidth;
+    resizer.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    function onMouseMove(e) {
+      const w = Math.min(600, Math.max(240, startWidth + startX - e.clientX));
+      compose.style.width = w + 'px';
+    }
+    function onMouseUp() {
+      resizer.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      localStorage.setItem('chatmail_compose_width', compose.offsetWidth);
+    }
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  });
+
+  const saved = localStorage.getItem('chatmail_compose_width');
+  if (saved) compose.style.width = saved + 'px';
+}
+
 // ===== INIT =====
 function setupDragDrop() {
   const replyArea = document.querySelector('.compose-area');
@@ -1195,6 +1270,8 @@ async function init() {
   document.getElementById('account-email').textContent = myEmail;
 
   setupDragDrop();
+  setupSidebarResize();
+  setupComposeResize();
 
   document.getElementById('contact-list').addEventListener('scroll', function () {
     if (this.scrollTop + this.clientHeight >= this.scrollHeight - 80) {

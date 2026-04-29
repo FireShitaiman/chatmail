@@ -38,6 +38,8 @@
   <div class="contact-list" id="contact-list"></div>
 </div>
 
+<div class="sidebar-resizer" id="sidebar-resizer"></div>
+
 <!-- MAIN -->
 <div class="main">
   <div class="chat-header">
@@ -51,60 +53,66 @@
     </div>
   </div>
 
-  <div class="messages" id="messages"></div>
+  <div class="main-body">
+    <div class="messages" id="messages"></div>
 
-  <!-- COMPOSE -->
-  <div class="compose-area">
-    <div class="ai-loading" id="ai-loading">
-      <span>AIが考えています</span>
-      <div class="dot-anim"><span></span><span></span><span></span></div>
-    </div>
+    <div class="compose-resizer" id="compose-resizer"></div>
 
-    <div class="ai-suggestion" id="ai-suggestion">
-      <div class="ai-suggestion-label">✦ AI提案</div>
-      <div class="ai-suggestion-text" id="ai-suggestion-text"></div>
-      <div class="ai-suggestion-actions">
-        <button class="btn-adopt" onclick="adoptSuggestion()">これで送る</button>
-        <button class="btn-discard" onclick="discardSuggestion()">破棄</button>
+    <!-- COMPOSE -->
+    <div class="compose-area">
+      <div class="ai-loading" id="ai-loading">
+        <span>AIが考えています</span>
+        <div class="dot-anim"><span></span><span></span><span></span></div>
       </div>
-    </div>
 
-    <div class="reply-cc-row hidden" id="reply-cc-row">
-      <input type="checkbox" class="sig-checkbox" id="reply-cc-checkbox" checked>
-      <span class="reply-cc-label">CC</span>
-      <span id="reply-cc-text"></span>
-    </div>
-
-    <div class="compose-box">
-      <div class="template-block hidden" id="template-greeting"></div>
-      <textarea
-        class="compose-input"
-        id="compose-input"
-        placeholder="本文を入力..."
-        rows="2"
-        oninput="onInputChange(this)"
-        onkeydown="onKeyDown(event)"
-        disabled
-      ></textarea>
-      <div class="template-block bottom hidden" id="template-signature">
-        <input type="checkbox" class="sig-checkbox" id="sig-checkbox" checked onchange="updateSigVisual()">
-        <span class="sig-text" id="sig-text"></span>
+      <div class="ai-suggestion" id="ai-suggestion">
+        <div class="ai-suggestion-label">✦ AI提案</div>
+        <div class="ai-suggestion-text" id="ai-suggestion-text"></div>
+        <div class="ai-suggestion-actions">
+          <button class="btn-adopt" onclick="adoptSuggestion()">これで送る</button>
+          <button class="btn-discard" onclick="discardSuggestion()">破棄</button>
+        </div>
       </div>
-    </div>
 
-    <div class="attachment-list" id="reply-attachment-list"></div>
-    <input type="file" id="file-input-reply" multiple style="display:none" onchange="handleFileInputChange(event,'reply')">
-
-    <div class="compose-toolbar">
-      <div class="tone-buttons" id="tone-buttons">
-        <button class="btn-tone" onclick="adjustTone('丁寧に')">丁寧に</button>
-        <button class="btn-tone" onclick="adjustTone('フランクに')">フランクに</button>
-        <button class="btn-tone" onclick="adjustTone('短く')">短く</button>
+      <div class="reply-cc-row hidden" id="reply-cc-row">
+        <input type="checkbox" class="sig-checkbox" id="reply-cc-checkbox" checked>
+        <span class="reply-cc-label">CC</span>
+        <span id="reply-cc-text"></span>
       </div>
-      <div class="right-actions">
-        <button class="btn-attach" onclick="document.getElementById('file-input-reply').click()" title="ファイルを添付">&#128206;</button>
-        <button class="btn-ai" id="btn-ai" onclick="triggerAI()">✦ AIに書かせる</button>
-        <button class="btn-send" onclick="sendMessage()">送信</button>
+
+      <div class="compose-box">
+        <div class="template-block hidden" id="template-greeting">
+          <input type="checkbox" class="sig-checkbox" id="greeting-checkbox" checked onchange="updateGreetingVisual()">
+          <span class="sig-text" id="greeting-text"></span>
+        </div>
+        <textarea
+          class="compose-input"
+          id="compose-input"
+          placeholder="本文を入力..."
+          oninput="onInputChange(this)"
+          onkeydown="onKeyDown(event)"
+          disabled
+        ></textarea>
+        <div class="template-block bottom hidden" id="template-signature">
+          <input type="checkbox" class="sig-checkbox" id="sig-checkbox" checked onchange="updateSigVisual()">
+          <span class="sig-text" id="sig-text"></span>
+        </div>
+      </div>
+
+      <div class="attachment-list" id="reply-attachment-list"></div>
+      <input type="file" id="file-input-reply" multiple style="display:none" onchange="handleFileInputChange(event,'reply')">
+
+      <div class="compose-toolbar">
+        <div class="tone-buttons" id="tone-buttons">
+          <button class="btn-tone" onclick="adjustTone('丁寧に')">丁寧に</button>
+          <button class="btn-tone" onclick="adjustTone('フランクに')">フランクに</button>
+          <button class="btn-tone" onclick="adjustTone('短く')">短く</button>
+        </div>
+        <div class="right-actions">
+          <button class="btn-attach" onclick="document.getElementById('file-input-reply').click()" title="ファイルを添付">&#128206;</button>
+          <button class="btn-ai" id="btn-ai" onclick="triggerAI()">✦ AIに書かせる</button>
+          <button class="btn-send" onclick="sendMessage()">送信</button>
+        </div>
       </div>
     </div>
   </div>
