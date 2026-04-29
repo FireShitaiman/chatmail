@@ -37,20 +37,31 @@ ipcMain.handle('gmail:get-config', () => {
   const oauth2 = makeOAuth2(config);
   return {
     clientId: config.clientId || '',
-    clientSecret: config.clientSecret || '',
     isAuthenticated: !!(oauth2 && config.tokens),
+    myEmail: config.myEmail || '',
   };
 });
 
 ipcMain.handle('gmail:save-config', (_, { clientId, clientSecret }) => {
-  saveConfig({ clientId, clientSecret });
+  const patch = {};
+  if (clientId)     patch.clientId = clientId;
+  if (clientSecret) patch.clientSecret = clientSecret;
+  saveConfig(patch);
   return { ok: true };
 });
 
 // ===== IPC: AUTH =====
 
+let oauthServer = null;
+
 ipcMain.handle('gmail:authenticate', () => {
   return new Promise((resolve) => {
+    // 前回の認証サーバーが残っていれば閉じる
+    if (oauthServer && oauthServer.listening) {
+      oauthServer.close();
+      oauthServer = null;
+    }
+
     const config = loadConfig();
     const oauth2 = makeOAuth2(config);
     if (!oauth2) return resolve({ ok: false, error: 'Client ID / Client Secret が設定されていません' });
@@ -74,6 +85,7 @@ ipcMain.handle('gmail:authenticate', () => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end('<html><body style="font-family:sans-serif;text-align:center;padding:60px"><h2>認証完了！<br>Chatmailに戻ってください。</h2></body></html>');
       server.close();
+      oauthServer = null;
 
       if (error || !code) {
         resolve({ ok: false, error: error || 'キャンセルされました' });
@@ -82,17 +94,31 @@ ipcMain.handle('gmail:authenticate', () => {
       try {
         const { tokens } = await oauth2.getToken(code);
         saveConfig({ tokens });
+        try {
+          oauth2.setCredentials(tokens);
+          const g = google.gmail({ version: 'v1', auth: oauth2 });
+          const profile = await g.users.getProfile({ userId: 'me' });
+          saveConfig({ myEmail: profile.data.emailAddress });
+        } catch {}
         resolve({ ok: true });
       } catch (e) {
         resolve({ ok: false, error: e.message });
       }
     });
 
+    oauthServer = server;
     server.listen(3000, () => shell.openExternal(authUrl));
-    server.on('error', (e) => resolve({ ok: false, error: 'ポート 3000 が使用中です: ' + e.message }));
+    server.on('error', (e) => {
+      oauthServer = null;
+      resolve({ ok: false, error: 'ポート 3000 が使用中です。アプリを再起動してから再試行してください。' });
+    });
 
     setTimeout(() => {
-      if (server.listening) { server.close(); resolve({ ok: false, error: 'タイムアウト（2分）' }); }
+      if (server.listening) {
+        server.close();
+        oauthServer = null;
+        resolve({ ok: false, error: 'タイムアウト（2分）' });
+      }
     }, 120000);
   });
 });
@@ -106,6 +132,109 @@ ipcMain.handle('gmail:signout', () => {
 
 ipcMain.handle('open-external', (_, url) => shell.openExternal(url));
 
+ipcMain.handle('gmail:mark-read', async (_, { threadId }) => {
+  const gmail = gmailClient();
+  if (!gmail) return { ok: false, error: '未認証' };
+  try {
+    const thread = await gmail.users.threads.get({ userId: 'me', id: threadId, format: 'minimal' });
+    const unreadIds = (thread.data.messages || [])
+      .filter(m => m.labelIds?.includes('UNREAD'))
+      .map(m => m.id);
+    await Promise.all(unreadIds.map(id =>
+      gmail.users.messages.modify({ userId: 'me', id, requestBody: { removeLabelIds: ['UNREAD'] } })
+    ));
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('gmail:trash-thread', async (_, { threadId }) => {
+  const gmail = gmailClient();
+  if (!gmail) return { ok: false, error: '未認証' };
+  try {
+    await gmail.users.threads.trash({ userId: 'me', id: threadId });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('gmail:mark-unread', async (_, { threadId }) => {
+  const gmail = gmailClient();
+  if (!gmail) return { ok: false, error: '未認証' };
+  try {
+    const thread = await gmail.users.threads.get({ userId: 'me', id: threadId, format: 'minimal' });
+    const lastMsg = (thread.data.messages || []).at(-1);
+    if (lastMsg) {
+      await gmail.users.messages.modify({
+        userId: 'me', id: lastMsg.id,
+        requestBody: { addLabelIds: ['UNREAD'] },
+      });
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('gmail:fetch-trash', async (_, { pageToken } = {}) => {
+  const gmail = gmailClient();
+  if (!gmail) return { ok: false, error: '未認証' };
+  try {
+    const listParams = { userId: 'me', maxResults: 30, q: 'in:trash OR in:spam' };
+    if (pageToken) listParams.pageToken = pageToken;
+
+    const [threadsRes, profileRes] = await Promise.all([
+      gmail.users.threads.list(listParams),
+      gmail.users.getProfile({ userId: 'me' }),
+    ]);
+    const myEmail = profileRes.data.emailAddress.toLowerCase();
+    const threads = threadsRes.data.threads || [];
+    const details = await Promise.all(
+      threads.map(t =>
+        gmail.users.threads.get({
+          userId: 'me', id: t.id, format: 'metadata',
+          metadataHeaders: ['From', 'To', 'Subject', 'Date'],
+        })
+      )
+    );
+    const contacts = details.map(detail => {
+      const msgs = detail.data.messages || [];
+      if (msgs.length === 0) return null;
+      const lastMsg = msgs[msgs.length - 1];
+      const headers = lastMsg.payload?.headers || [];
+      const fromHeader = getHeader(headers, 'From');
+      const subject = getHeader(headers, 'Subject');
+      const date = getHeader(headers, 'Date');
+      const allLabels = msgs.flatMap(m => m.labelIds || []);
+      const isSpam = allLabels.includes('SPAM');
+      const { email: fromEmail } = parseFrom(fromHeader);
+      const contactStr = fromEmail.toLowerCase() === myEmail
+        ? (getHeader(headers, 'To') || fromHeader) : fromHeader;
+      const { name, email } = parseFrom(contactStr);
+      return { threadId: detail.data.id, name, email, subject, preview: subject, time: formatTime(date), unread: false, isSpam };
+    }).filter(Boolean);
+    return { ok: true, contacts, nextPageToken: threadsRes.data.nextPageToken || null };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('gmail:restore-thread', async (_, { threadId }) => {
+  const gmail = gmailClient();
+  if (!gmail) return { ok: false, error: '未認証' };
+  try {
+    await gmail.users.threads.modify({
+      userId: 'me', id: threadId,
+      requestBody: { addLabelIds: ['INBOX'], removeLabelIds: ['TRASH', 'SPAM'] },
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
 // ===== GMAIL CLIENT =====
 
 function gmailClient() {
@@ -113,6 +242,10 @@ function gmailClient() {
   const oauth2 = makeOAuth2(config);
   if (!oauth2 || !config.tokens) return null;
   oauth2.setCredentials(config.tokens);
+  oauth2.on('tokens', (tokens) => {
+    const current = loadConfig();
+    saveConfig({ tokens: { ...current.tokens, ...tokens } });
+  });
   return google.gmail({ version: 'v1', auth: oauth2 });
 }
 
@@ -145,6 +278,36 @@ function extractPlainText(payload) {
   return '';
 }
 
+function stripQuotedText(text) {
+  const lines = text.split('\n');
+  const result = [];
+  for (const line of lines) {
+    if (/^On .{10,300}wrote:\s*$/.test(line.trim())) break;
+    if (/<[^@\s>]+@[^@\s>]+\.[^@\s>]+>:\s*$/.test(line)) break;
+    if (/^>/.test(line)) continue;
+    result.push(line);
+  }
+  return result.join('\n').trim();
+}
+
+function extractAttachments(payload) {
+  const atts = [];
+  function walk(part) {
+    if (!part) return;
+    if (part.filename && part.body?.attachmentId) {
+      atts.push({
+        name: part.filename,
+        mimeType: part.mimeType || 'application/octet-stream',
+        attachmentId: part.body.attachmentId,
+        size: part.body.size || 0,
+      });
+    }
+    if (part.parts) part.parts.forEach(walk);
+  }
+  walk(payload);
+  return atts;
+}
+
 function parseFrom(from) {
   const match = from.match(/^"?(.+?)"?\s*<(.+?)>$/);
   if (match) return { name: match[1].trim(), email: match[2].trim() };
@@ -166,16 +329,21 @@ function formatDate(dateStr) {
 
 // ===== IPC: FETCH THREADS =====
 
-ipcMain.handle('gmail:fetch-threads', async () => {
+ipcMain.handle('gmail:fetch-threads', async (_, { pageToken } = {}) => {
   const gmail = gmailClient();
   if (!gmail) return { ok: false, error: '未認証' };
 
   try {
-    const res = await gmail.users.threads.list({
-      userId: 'me', maxResults: 20, q: 'in:inbox',
-    });
+    const listParams = { userId: 'me', maxResults: 20, q: 'in:inbox' };
+    if (pageToken) listParams.pageToken = pageToken;
 
-    const threads = res.data.threads || [];
+    const [threadsRes, profileRes] = await Promise.all([
+      gmail.users.threads.list(listParams),
+      gmail.users.getProfile({ userId: 'me' }),
+    ]);
+
+    const myEmail = profileRes.data.emailAddress.toLowerCase();
+    const threads = threadsRes.data.threads || [];
 
     const details = await Promise.all(
       threads.map(t =>
@@ -186,18 +354,27 @@ ipcMain.handle('gmail:fetch-threads', async () => {
       )
     );
 
+    const snippetMap = {};
+    (threadsRes.data.threads || []).forEach(t => { snippetMap[t.id] = t.snippet || ''; });
+
     const contacts = details.map(detail => {
       const msgs = detail.data.messages || [];
       if (msgs.length === 0) return null;
 
       const lastMsg = msgs[msgs.length - 1];
       const headers = lastMsg.payload?.headers || [];
-      const from = getHeader(headers, 'From');
+      const fromHeader = getHeader(headers, 'From');
       const subject = getHeader(headers, 'Subject');
       const date = getHeader(headers, 'Date');
       const unread = msgs.some(m => m.labelIds?.includes('UNREAD'));
 
-      const { name, email } = parseFrom(from);
+      // 自分が最後に返信したスレッドは To ヘッダーを相手として使う
+      const { email: fromEmail } = parseFrom(fromHeader);
+      const contactStr = fromEmail.toLowerCase() === myEmail
+        ? (getHeader(headers, 'To') || fromHeader)
+        : fromHeader;
+
+      const { name, email } = parseFrom(contactStr);
 
       return {
         threadId: detail.data.id,
@@ -207,10 +384,11 @@ ipcMain.handle('gmail:fetch-threads', async () => {
         preview: subject,
         time: formatTime(date),
         unread,
+        snippet: snippetMap[detail.data.id] || '',
       };
     }).filter(Boolean);
 
-    return { ok: true, contacts };
+    return { ok: true, contacts, nextPageToken: threadsRes.data.nextPageToken || null };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -244,14 +422,60 @@ ipcMain.handle('gmail:fetch-messages', async (_, { threadId }) => {
       lastDate = dateStr;
 
       return {
+        messageId: msg.id,
         type: isSent ? 'sent' : 'received',
-        text: body.trim(),
+        text: isSent ? body.trim() : stripQuotedText(body),
         time: formatTime(date),
         date: showDate ? dateStr : null,
+        attachments: extractAttachments(msg.payload),
       };
     });
 
-    return { ok: true, messages };
+    // CCの抽出：最後のメッセージのCCのみ参照（古いCCが蓄積しないよう）
+    const allMsgs = threadDetail.data.messages || [];
+    const lastMsg = allMsgs[allMsgs.length - 1];
+    const lastHeaders = lastMsg?.payload?.headers || [];
+    const rawCC = getHeader(lastHeaders, 'Cc');
+    const threadCC = rawCC
+      ? rawCC.split(',').map(s => s.trim()).filter(s => {
+          const { email } = parseFrom(s);
+          return email.toLowerCase() !== myEmail;
+        }).join(', ')
+      : '';
+
+    return { ok: true, messages, threadCC };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// ===== IPC: GET ATTACHMENT =====
+
+ipcMain.handle('gmail:get-attachment', async (_, { messageId, attachmentId, filename }) => {
+  const gmail = gmailClient();
+  if (!gmail) return { ok: false, error: '未認証' };
+  try {
+    const res = await gmail.users.messages.attachments.get({
+      userId: 'me', messageId, id: attachmentId,
+    });
+    const data = Buffer.from(res.data.data.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+    const tmpPath = path.join(app.getPath('temp'), filename);
+    fs.writeFileSync(tmpPath, data);
+    await shell.openPath(tmpPath);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+ipcMain.handle('gmail:get-attachment-data', async (_, { messageId, attachmentId }) => {
+  const gmail = gmailClient();
+  if (!gmail) return { ok: false, error: '未認証' };
+  try {
+    const res = await gmail.users.messages.attachments.get({
+      userId: 'me', messageId, id: attachmentId,
+    });
+    return { ok: true, data: res.data.data.replace(/-/g, '+').replace(/_/g, '/') };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -259,7 +483,13 @@ ipcMain.handle('gmail:fetch-messages', async (_, { threadId }) => {
 
 // ===== IPC: SEND =====
 
-ipcMain.handle('gmail:send', async (_, { to, subject, body, threadId }) => {
+function wrapBase64(b64, lineLen = 76) {
+  const lines = [];
+  for (let i = 0; i < b64.length; i += lineLen) lines.push(b64.slice(i, i + lineLen));
+  return lines.join('\r\n');
+}
+
+ipcMain.handle('gmail:send', async (_, { to, cc, bcc, subject, body, threadId, attachments }) => {
   const gmail = gmailClient();
   if (!gmail) return { ok: false, error: '未認証' };
 
@@ -267,20 +497,57 @@ ipcMain.handle('gmail:send', async (_, { to, subject, body, threadId }) => {
     const profileRes = await gmail.users.getProfile({ userId: 'me' });
     const from = profileRes.data.emailAddress;
 
-    const replySubject = subject.startsWith('Re:') ? subject : 'Re: ' + subject;
+    const finalSubject = threadId
+      ? (subject.startsWith('Re:') ? subject : 'Re: ' + subject)
+      : subject;
 
-    const raw = [
-      `From: ${from}`,
-      `To: ${to}`,
-      `Subject: =?utf-8?B?${Buffer.from(replySubject).toString('base64')}?=`,
-      'MIME-Version: 1.0',
-      'Content-Type: text/plain; charset=utf-8',
-      'Content-Transfer-Encoding: base64',
-      '',
-      Buffer.from(body).toString('base64'),
-    ].join('\r\n');
+    const encodedSubject = `=?utf-8?B?${Buffer.from(finalSubject).toString('base64')}?=`;
+    const baseHeaders = [`From: ${from}`, `To: ${to}`];
+    if (cc)  baseHeaders.push(`Cc: ${cc}`);
+    if (bcc) baseHeaders.push(`Bcc: ${bcc}`);
+    baseHeaders.push(`Subject: ${encodedSubject}`, 'MIME-Version: 1.0');
 
-    await gmail.users.messages.send({
+    let raw;
+    if (attachments && attachments.length > 0) {
+      const boundary = `chatmail_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      baseHeaders.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+      const parts = [baseHeaders.join('\r\n'), ''];
+
+      parts.push(
+        `--${boundary}`,
+        'Content-Type: text/plain; charset=utf-8',
+        'Content-Transfer-Encoding: base64',
+        '',
+        wrapBase64(Buffer.from(body).toString('base64')),
+        '',
+      );
+
+      for (const att of attachments) {
+        const encodedName = `=?utf-8?B?${Buffer.from(att.name).toString('base64')}?=`;
+        parts.push(
+          `--${boundary}`,
+          `Content-Type: ${att.mimeType || 'application/octet-stream'}; name="${encodedName}"`,
+          'Content-Transfer-Encoding: base64',
+          `Content-Disposition: attachment; filename="${encodedName}"`,
+          '',
+          wrapBase64(att.data),
+          '',
+        );
+      }
+
+      parts.push(`--${boundary}--`);
+      raw = parts.join('\r\n');
+    } else {
+      baseHeaders.push(
+        'Content-Type: text/plain; charset=utf-8',
+        'Content-Transfer-Encoding: base64',
+        '',
+        wrapBase64(Buffer.from(body).toString('base64')),
+      );
+      raw = baseHeaders.join('\r\n');
+    }
+
+    const sendRes = await gmail.users.messages.send({
       userId: 'me',
       requestBody: {
         raw: Buffer.from(raw).toString('base64url'),
@@ -288,7 +555,7 @@ ipcMain.handle('gmail:send', async (_, { to, subject, body, threadId }) => {
       },
     });
 
-    return { ok: true };
+    return { ok: true, threadId: sendRes.data.threadId };
   } catch (e) {
     return { ok: false, error: e.message };
   }
