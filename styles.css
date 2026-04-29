@@ -232,6 +232,16 @@ body {
   text-align: center;
 }
 
+/* ===== SENDER GROUP ===== */
+.contact-group-wrap { border-bottom: 1px solid #f0f0f0; }
+.group-header { background: #fafafa; }
+.group-header:hover { background: #f4f4f4; }
+.group-header.has-active { background: #eef1fe; }
+.group-toggle-icon { font-size: 9px; color: #bbb; margin-top: 2px; }
+.group-child { padding-left: 20px; background: #fdfcff; border-top: 1px solid #f5f5f5; }
+.group-child:hover { background: #f6f5ff; }
+.group-child .contact-info { padding-left: 8px; }
+
 /* ===== EMPTY / LOADING STATES ===== */
 .sidebar-empty {
   display: flex;
@@ -320,8 +330,16 @@ body {
 .message-group.sent { align-items: flex-end; }
 .message-group.received { align-items: flex-start; }
 
+.bubble-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 70%;
+}
+.sent .bubble-wrap { flex-direction: row-reverse; }
+
 .bubble {
-  max-width: 65%;
+  max-width: 100%;
   padding: 10px 14px;
   border-radius: 16px;
   font-size: 14px;
@@ -329,6 +347,24 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.msg-task-btn {
+  opacity: 0;
+  transition: opacity 0.15s;
+  background: none;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  padding: 3px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  color: #bbb;
+  white-space: nowrap;
+  flex-shrink: 0;
+  align-self: flex-end;
+  margin-bottom: 2px;
+}
+.message-group:hover .msg-task-btn { opacity: 1; }
+.msg-task-btn:hover { background: #4f6ef7; color: #fff; border-color: #4f6ef7; }
 
 .sent .bubble {
   background: #4f6ef7;
@@ -344,6 +380,8 @@ body {
 }
 
 .message-time { font-size: 11px; color: #bbb; padding: 0 4px; margin-top: 2px; }
+
+.received-only .received .bubble-wrap { max-width: 92%; }
 
 .date-divider {
   text-align: center;

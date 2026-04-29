@@ -560,3 +560,68 @@ ipcMain.handle('gmail:send', async (_, { to, cc, bcc, subject, body, threadId, a
     return { ok: false, error: e.message };
   }
 });
+
+// ===== IPC: FORWARD =====
+
+ipcMain.handle('gmail:forward', async (_, { to, cc, bcc, subject, body, originalMessageId, threadId }) => {
+  const gmail = gmailClient();
+  if (!gmail) return { ok: false, error: '未認証' };
+
+  try {
+    const profileRes = await gmail.users.getProfile({ userId: 'me' });
+    const from = profileRes.data.emailAddress;
+
+    // 元メッセージ情報を取得
+    const originalMsg = await gmail.users.messages.get({
+      userId: 'me',
+      id: originalMessageId,
+      format: 'full',
+    });
+
+    const origHeaders = originalMsg.data.payload?.headers || [];
+    const origFrom = getHeader(origHeaders, 'From');
+    const origDate = getHeader(origHeaders, 'Date');
+    const origSubject = getHeader(origHeaders, 'Subject');
+    const origBody = extractPlainText(originalMsg.data.payload);
+
+    // 転送本文を構成
+    const forwardHeader = `
+---------- Forwarded message ---------
+From: ${origFrom}
+Date: ${origDate}
+Subject: ${origSubject}
+To: ${getHeader(origHeaders, 'To')}
+
+`;
+
+    const fullBody = body + forwardHeader + origBody;
+
+    const now = new Date();
+    const boundary = `----ChatmailBoundary${now.getTime()}`;
+
+    const headers = [
+      `From: <${from}>`,
+      `To: ${to}`,
+      cc ? `Cc: ${cc}` : '',
+      bcc ? `Bcc: ${bcc}` : '',
+      `Subject: ${subject}`,
+      'MIME-Version: 1.0',
+      `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    ].filter(Boolean).join('\r\n');
+
+    const textPart = `--${boundary}\r\nContent-Type: text/plain; charset="UTF-8"\r\nContent-Transfer-Encoding: 7bit\r\n\r\n${fullBody}\r\n`;
+    const raw = `${headers}\r\n\r\n${textPart}--${boundary}--`;
+
+    const sendRes = await gmail.users.messages.send({
+      userId: 'me',
+      requestBody: {
+        raw: Buffer.from(raw).toString('base64url'),
+        threadId: threadId || undefined,
+      },
+    });
+
+    return { ok: true, threadId: sendRes.data.threadId };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});

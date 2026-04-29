@@ -124,6 +124,8 @@ let replyAttachments = [];
 let newMailAttachments = [];
 let nextPageToken = null;
 let isLoadingMore = false;
+let currentMessages = [];
+let expandedGroups = new Set();
 
 // 相手別の冒頭文は localStorage に保存（email → greeting）
 function getGreeting(email) {
@@ -146,34 +148,91 @@ function emailToColor(email) {
 }
 
 // ===== SIDEBAR =====
+function getDisplayItems() {
+  const byEmail = new Map();
+  contacts.forEach((c, i) => {
+    const key = c.email.toLowerCase();
+    if (!byEmail.has(key)) byEmail.set(key, []);
+    byEmail.get(key).push(i);
+  });
+  const items = [];
+  const seen = new Set();
+  contacts.forEach((c, i) => {
+    const key = c.email.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    const indices = byEmail.get(key);
+    if (indices.length === 1) {
+      items.push({ type: 'single', index: i });
+    } else {
+      items.push({ type: 'group', key, indices });
+    }
+  });
+  return items;
+}
+
+function toggleGroup(key) {
+  if (expandedGroups.has(key)) expandedGroups.delete(key);
+  else expandedGroups.add(key);
+  renderContactList();
+}
+
+function contactItemHTML(c, i, isChild) {
+  const isActive = currentContact && currentContact.threadId === c.threadId;
+  const actions = currentView === 'trash'
+    ? `<button class="contact-action-btn" title="受信トレイに戻す" onclick="restoreThread('${esc(c.threadId)}',${i},'${esc(c.email)}')">${getBlocklist().includes(c.email.toLowerCase()) ? '🔓 解除して戻す' : '戻す'}</button>`
+    : `${!c.unread ? `<button class="contact-action-btn unread" title="未読にする" onclick="markUnread('${esc(c.threadId)}',${i})">未読</button>` : ''}
+       <button class="contact-action-btn block-trash" title="ブロックしてゴミ箱へ" onclick="blockAndTrash('${esc(c.threadId)}',${i},'${esc(c.email)}')">🚫</button>
+       <button class="contact-action-btn trash" title="ゴミ箱へ" onclick="trashThread('${esc(c.threadId)}',${i})">🗑</button>`;
+  const nameLabel = isChild
+    ? `${esc(c.subject || c.preview || '')}${c.isSpam ? ' <span class="spam-badge">迷惑</span>' : ''}`
+    : `${esc(c.name)}${c.isSpam ? ' <span class="spam-badge">迷惑</span>' : ''}`;
+  return `
+    <div class="contact-item${isActive ? ' active' : ''}${isChild ? ' group-child' : ''}"
+         data-index="${i}" onclick="selectContact(${i})">
+      ${!isChild ? `<div class="avatar" style="background:${emailToColor(c.email)}">${(c.name[0] || '?').toUpperCase()}</div>` : ''}
+      <div class="contact-info">
+        <div class="contact-name">${nameLabel}</div>
+        <div class="contact-preview">${esc(isChild ? (c.preview || '') : (c.preview || c.subject || ''))}</div>
+      </div>
+      <div class="contact-meta">
+        <span class="contact-time">${esc(c.time)}</span>
+        ${c.unread ? '<span class="unread-badge">●</span>' : ''}
+      </div>
+      <div class="contact-actions" onclick="event.stopPropagation()">${actions}</div>
+    </div>`;
+}
+
 function renderContactList() {
   const list = document.getElementById('contact-list');
   if (contacts.length === 0) {
     list.innerHTML = '<div class="sidebar-empty"><p>受信トレイが空です。</p></div>';
     return;
   }
-  list.innerHTML = contacts.map((c, i) => `
-    <div class="contact-item${currentContact && currentContact.threadId === c.threadId ? ' active' : ''}"
-         data-index="${i}"
-         onclick="selectContact(${i})">
-      <div class="avatar" style="background:${emailToColor(c.email)}">${(c.name[0] || '?').toUpperCase()}</div>
-      <div class="contact-info">
-        <div class="contact-name">${esc(c.name)}${c.isSpam ? ' <span class="spam-badge">迷惑</span>' : ''}</div>
-        <div class="contact-preview">${esc(c.preview || c.subject || '')}</div>
-      </div>
-      <div class="contact-meta">
-        <span class="contact-time">${esc(c.time)}</span>
-        ${c.unread ? '<span class="unread-badge">●</span>' : ''}
-      </div>
-      <div class="contact-actions" onclick="event.stopPropagation()">
-        ${currentView === 'trash'
-          ? `<button class="contact-action-btn" title="受信トレイに戻す" onclick="restoreThread('${esc(c.threadId)}',${i},'${esc(c.email)}')">${getBlocklist().includes(c.email.toLowerCase()) ? '🔓 解除して戻す' : '戻す'}</button>`
-          : `${!c.unread ? `<button class="contact-action-btn unread" title="未読にする" onclick="markUnread('${esc(c.threadId)}',${i})">未読</button>` : ''}
-             <button class="contact-action-btn block-trash" title="ブロックしてゴミ箱へ" onclick="blockAndTrash('${esc(c.threadId)}',${i},'${esc(c.email)}')">🚫</button>
-             <button class="contact-action-btn trash" title="ゴミ箱へ" onclick="trashThread('${esc(c.threadId)}',${i})">🗑</button>`
-        }
-      </div>
-    </div>`).join('');
+  list.innerHTML = getDisplayItems().map(item => {
+    if (item.type === 'single') return contactItemHTML(contacts[item.index], item.index, false);
+
+    const c0 = contacts[item.indices[0]];
+    const expanded = expandedGroups.has(item.key);
+    const unreadCount = item.indices.filter(i => contacts[i].unread).length;
+    const hasActive = item.indices.some(i => currentContact && contacts[i].threadId === currentContact.threadId);
+    return `
+      <div class="contact-group-wrap">
+        <div class="contact-item group-header${hasActive ? ' has-active' : ''}" onclick="toggleGroup('${esc(item.key)}')">
+          <div class="avatar" style="background:${emailToColor(c0.email)}">${(c0.name[0] || '?').toUpperCase()}</div>
+          <div class="contact-info">
+            <div class="contact-name">${esc(c0.name)}</div>
+            <div class="contact-preview">${item.indices.length}件のメール</div>
+          </div>
+          <div class="contact-meta">
+            <span class="contact-time">${esc(c0.time)}</span>
+            ${unreadCount > 0 ? '<span class="unread-badge">●</span>' : ''}
+            <span class="group-toggle-icon">${expanded ? '▲' : '▼'}</span>
+          </div>
+        </div>
+        ${expanded ? item.indices.map(i => contactItemHTML(contacts[i], i, true)).join('') : ''}
+      </div>`;
+  }).join('');
 }
 
 function showSidebarEmpty(message, showConnectBtn) {
@@ -186,11 +245,18 @@ function showSidebarEmpty(message, showConnectBtn) {
 
 function filterContacts(query) {
   const q = query.trim().toLowerCase();
-  document.querySelectorAll('#contact-list .contact-item').forEach(el => {
+  document.querySelectorAll('#contact-list .contact-item[data-index]').forEach(el => {
     const i = parseInt(el.dataset.index, 10);
     const c = contacts[i];
     const match = !q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q) || c.subject.toLowerCase().includes(q);
     el.style.display = match ? '' : 'none';
+  });
+  document.querySelectorAll('#contact-list .contact-group-wrap').forEach(wrap => {
+    const headerEl = wrap.querySelector('.group-header');
+    const anyChildVisible = Array.from(wrap.querySelectorAll('.contact-item[data-index]'))
+      .some(el => el.style.display !== 'none');
+    if (headerEl) headerEl.style.display = anyChildVisible || !q ? '' : 'none';
+    wrap.style.display = anyChildVisible || !q ? '' : 'none';
   });
 }
 
@@ -266,6 +332,7 @@ async function selectContact(index) {
 
   const result = await window.electronAPI.gmail.fetchMessages(c.threadId);
   if (result.ok) {
+    currentMessages = result.messages;
     renderMessages(result.messages);
   } else {
     msgs.innerHTML = `<div style="text-align:center;padding:40px;color:#e8605a;font-size:13px">読み込みエラー: ${esc(result.error)}</div>`;
@@ -288,6 +355,10 @@ async function selectContact(index) {
     document.getElementById('reply-cc-checkbox').checked = true;
     document.getElementById('reply-cc-row').classList.remove('hidden');
   }
+
+  // タスク追加・転送ボタンを表示
+  document.getElementById('btn-add-task').style.display = '';
+  document.getElementById('btn-forward').style.display = '';
 }
 
 function formatFileSize(bytes) {
@@ -299,6 +370,9 @@ function formatFileSize(bytes) {
 function renderMessages(messages) {
   const msgs = document.getElementById('messages');
   msgs.innerHTML = '';
+
+  const hasSent = messages.some(m => m.type === 'sent');
+  msgs.classList.toggle('received-only', !hasSent);
 
   messages.forEach(m => {
     if (m.date) {
@@ -333,7 +407,16 @@ function renderMessages(messages) {
         }</div>`
       : '';
 
-    group.innerHTML = `<div class="bubble">${esc(m.text)}${atts}</div><div class="message-time">${esc(m.time)}</div>`;
+    group.innerHTML = `<div class="bubble-wrap"><div class="bubble">${esc(m.text)}${atts}</div></div><div class="message-time">${esc(m.time)}</div>`;
+    const taskBtn = document.createElement('button');
+    taskBtn.className = 'msg-task-btn';
+    taskBtn.textContent = '✓ タスク';
+    taskBtn.title = 'タスクに追加';
+    taskBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      openAddTaskDialog(currentContact ? currentContact.threadId : '', m.messageId || '', (m.text || '').slice(0, 100));
+    });
+    group.querySelector('.bubble-wrap').appendChild(taskBtn);
     msgs.appendChild(group);
   });
 
@@ -369,7 +452,7 @@ function appendSentMessage(text) {
   const time = `${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
   const group = document.createElement('div');
   group.className = 'message-group sent';
-  group.innerHTML = `<div class="bubble">${esc(text)}</div><div class="message-time">${time}</div>`;
+  group.innerHTML = `<div class="bubble-wrap"><div class="bubble">${esc(text)}</div></div><div class="message-time">${time}</div>`;
   msgs.appendChild(group);
   msgs.scrollTop = msgs.scrollHeight;
 }
@@ -726,6 +809,69 @@ function openCompose() {
 function updateComposeSig() {
   document.getElementById('compose-sig-text').style.opacity =
     document.getElementById('compose-sig-checkbox').checked ? '1' : '0.35';
+}
+
+function openForward() { openForwardModal(); }
+
+function openForwardModal() {
+  if (!currentContact || !currentMessages.length) return;
+
+  const lastReceived = [...currentMessages].reverse().find(m => m.type === 'received')
+    || currentMessages[currentMessages.length - 1];
+
+  document.getElementById('forward-to').value = '';
+  document.getElementById('forward-cc').value = '';
+  document.getElementById('forward-bcc').value = '';
+  document.getElementById('forward-body').value = '';
+
+  document.getElementById('forward-overlay').dataset.subject = currentContact.subject || '';
+  document.getElementById('forward-overlay').dataset.originalBody = lastReceived ? (lastReceived.text || '') : '';
+  document.getElementById('forward-overlay').dataset.fromName = currentContact.name || '';
+  document.getElementById('forward-overlay').dataset.fromEmail = currentContact.email || '';
+
+  document.getElementById('forward-overlay').classList.add('visible');
+  setTimeout(() => document.getElementById('forward-to').focus(), 50);
+}
+
+function closeForwardModal(e) {
+  if (e && e.target !== document.getElementById('forward-overlay')) return;
+  document.getElementById('forward-overlay').classList.remove('visible');
+}
+
+async function sendForward() {
+  const to = document.getElementById('forward-to').value.trim();
+  const cc = document.getElementById('forward-cc').value.trim();
+  const bcc = document.getElementById('forward-bcc').value.trim();
+  const comment = document.getElementById('forward-body').value.trim();
+
+  if (!to) { alert('転送先を入力してください。'); return; }
+
+  const overlay = document.getElementById('forward-overlay');
+  const subject = 'Fw: ' + (overlay.dataset.subject || '');
+  const fwBody = [
+    comment,
+    comment ? '' : null,
+    '---------- Forwarded message ----------',
+    `From: ${overlay.dataset.fromName} <${overlay.dataset.fromEmail}>`,
+    `Subject: ${overlay.dataset.subject || ''}`,
+    '',
+    overlay.dataset.originalBody || '',
+  ].filter(l => l !== null).join('\n');
+
+  const btn = document.querySelector('#forward-overlay .btn-save');
+  btn.disabled = true;
+  btn.textContent = '送信中...';
+
+  const result = await window.electronAPI.gmail.send({ to, cc, bcc, subject, body: fwBody });
+  btn.disabled = false;
+  btn.textContent = '転送';
+
+  if (result.ok) {
+    closeForwardModal();
+    showToast('転送しました');
+  } else {
+    alert('転送エラー: ' + result.error);
+  }
 }
 
 function closeCompose(e) {
@@ -1153,14 +1299,21 @@ async function switchView(view) {
   document.getElementById('messages').innerHTML = '';
   document.getElementById('header-name').textContent = 'Chatmail';
   document.getElementById('header-email').textContent = '左のリストから相手を選択';
+  document.getElementById('btn-add-task').style.display = 'none';
+  document.getElementById('btn-forward').style.display = 'none';
+  currentMessages = [];
+  expandedGroups.clear();
   resetCompose();
 
   document.getElementById('tab-inbox').classList.toggle('active', view === 'inbox');
+  document.getElementById('tab-tasks').classList.toggle('active', view === 'tasks');
   document.getElementById('tab-trash').classList.toggle('active', view === 'trash');
   document.getElementById('filter-row').style.display = view === 'inbox' ? '' : 'none';
 
   if (view === 'inbox') {
     await loadInbox();
+  } else if (view === 'tasks') {
+    renderTaskList();
   } else {
     await loadTrash();
   }
@@ -1174,6 +1327,107 @@ async function loadTrash() {
   nextPageToken = result.nextPageToken;
   renderContactList();
   if (contacts.length === 0) showSidebarEmpty('ゴミ箱は空です。', false);
+}
+
+// ===== TASK STORAGE =====
+function getTasks() {
+  return JSON.parse(localStorage.getItem('chatmail_tasks') || '[]');
+}
+function saveTasks(tasks) {
+  localStorage.setItem('chatmail_tasks', JSON.stringify(tasks));
+}
+function removeTask(id) {
+  saveTasks(getTasks().filter(t => t.id !== id));
+  renderTaskList();
+  showToast('タスクを削除しました');
+}
+
+let pendingTask = null;
+
+function openAddTaskDialog(threadId, messageId, snippet) {
+  if (!threadId && currentContact) {
+    const lastMsg = [...currentMessages].reverse().find(m => m.type === 'received') || currentMessages[currentMessages.length - 1];
+    threadId = currentContact.threadId;
+    messageId = lastMsg ? (lastMsg.messageId || '') : '';
+    snippet = lastMsg ? (lastMsg.text || '').slice(0, 100) : '';
+  }
+  if (!threadId) return;
+
+  pendingTask = {
+    threadId,
+    messageId: messageId || '',
+    contactEmail: currentContact ? currentContact.email : '',
+    contactName: currentContact ? currentContact.name : '',
+    subject: currentContact ? (currentContact.subject || '') : '',
+    snippet: snippet || '',
+  };
+
+  const nameEl = document.getElementById('task-contact-name');
+  const subjectEl = document.getElementById('task-subject');
+  if (nameEl) nameEl.textContent = currentContact ? currentContact.name : '';
+  if (subjectEl) subjectEl.textContent = snippet ? snippet.slice(0, 80) + (snippet.length > 80 ? '…' : '') : (currentContact ? (currentContact.subject || '') : '');
+
+  document.getElementById('task-memo').value = '';
+  document.getElementById('task-modal-overlay').classList.add('visible');
+  setTimeout(() => document.getElementById('task-memo').focus(), 50);
+}
+
+function closeTaskModal(e) {
+  if (e && e.target !== document.getElementById('task-modal-overlay')) return;
+  document.getElementById('task-modal-overlay').classList.remove('visible');
+  pendingTask = null;
+}
+
+function saveTask() {
+  if (!pendingTask) return;
+  const memo = document.getElementById('task-memo').value.trim();
+  const tasks = getTasks();
+  tasks.unshift({ id: Date.now().toString(), ...pendingTask, memo, createdAt: new Date().toISOString() });
+  saveTasks(tasks);
+  closeTaskModal();
+  showToast('タスクに追加しました ✓');
+}
+
+// ===== TASK LIST =====
+function renderTaskList() {
+  const tasks = getTasks();
+  contacts = [];
+  const list = document.getElementById('contact-list');
+
+  if (tasks.length === 0) {
+    list.innerHTML = `<div class="sidebar-empty"><p>タスクはまだありません。<br>メールにカーソルを合わせると<br>「✓ タスク」ボタンが表示されます。</p></div>`;
+    return;
+  }
+
+  list.innerHTML = tasks.map(t => {
+    const date = new Date(t.createdAt);
+    const dateStr = `${date.getMonth() + 1}/${date.getDate()}`;
+    const displayName = t.contactName || t.contactEmail || '（不明）';
+    return `
+      <div class="contact-item task-item" onclick="gotoTask('${esc(t.id)}')">
+        <div class="avatar" style="background:${emailToColor(t.contactEmail || '')}">${(displayName[0] || '?').toUpperCase()}</div>
+        <div class="contact-info">
+          <div class="contact-name">${esc(displayName)}</div>
+          <div class="contact-preview">${t.memo ? `📝 ${esc(t.memo)}` : esc(t.subject || t.snippet || '')}</div>
+        </div>
+        <div class="contact-meta"><span class="contact-time">${dateStr}</span></div>
+        <div class="contact-actions" onclick="event.stopPropagation()">
+          <button class="contact-action-btn trash" title="タスクを削除" onclick="removeTask('${esc(t.id)}')">🗑</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+async function gotoTask(taskId) {
+  const task = getTasks().find(t => t.id === taskId);
+  if (!task) return;
+  await switchView('inbox');
+  const idx = contacts.findIndex(c => c.threadId === task.threadId);
+  if (idx !== -1) {
+    await selectContact(idx);
+  } else {
+    showToast('スレッドが受信トレイに見つかりません');
+  }
 }
 
 // ===== SIDEBAR RESIZE =====

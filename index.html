@@ -29,6 +29,7 @@
   </div>
   <div class="inbox-tabs">
     <button class="inbox-tab active" id="tab-inbox" onclick="switchView('inbox')">受信トレイ</button>
+    <button class="inbox-tab" id="tab-tasks" onclick="switchView('tasks')">タスク</button>
     <button class="inbox-tab" id="tab-trash" onclick="switchView('trash')">迷惑・ゴミ箱</button>
   </div>
   <div class="filter-row" id="filter-row">
@@ -49,6 +50,8 @@
       <p id="header-email">左のリストから相手を選択</p>
     </div>
     <div style="display:flex;gap:4px;align-items:center">
+      <button class="btn-icon" id="btn-forward" style="display:none" onclick="openForward()" title="転送">&#8618;</button>
+      <button class="btn-icon" id="btn-add-task" style="display:none" onclick="openAddTaskDialog()" title="タスクに追加">&#10003;</button>
       <button class="btn-icon" onclick="openSettings()" title="設定">&#9881;</button>
     </div>
   </div>
@@ -241,6 +244,67 @@
         <button class="btn-cancel" onclick="closeCompose()">キャンセル</button>
         <button class="btn-save" id="compose-send-btn" onclick="sendNewMail()">送信</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- TASK MODAL (Add/Edit) -->
+<div class="modal-overlay" id="task-modal-overlay" onclick="closeTaskModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="task-modal-title">タスクに追加</h3>
+      <button class="btn-icon" onclick="closeTaskModal()">&#10005;</button>
+    </div>
+    <div class="modal-body" style="gap:8px">
+      <div id="task-info-display" style="padding:8px;background:#f5f5f5;border-radius:4px;font-size:12px">
+        <div style="font-weight:bold" id="task-contact-name"></div>
+        <div style="color:#666" id="task-subject"></div>
+      </div>
+      <label style="font-size:13px;font-weight:bold">メモ（任意）</label>
+      <textarea id="task-memo" class="compose-new-body" placeholder="このメールについてのメモを入力..." style="height:120px"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeTaskModal()">キャンセル</button>
+      <button class="btn-save" onclick="saveTask()">タスクに追加</button>
+    </div>
+  </div>
+</div>
+
+<!-- FORWARD MODAL -->
+<div class="modal-overlay" id="forward-overlay" onclick="closeForwardModal(event)">
+  <div class="modal compose-modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3>メールを転送</h3>
+      <button class="btn-icon" onclick="closeForwardModal()">&#10005;</button>
+    </div>
+    <div class="modal-body" style="gap:0;padding:0 20px 16px">
+      <div class="compose-field-row">
+        <span class="compose-field-label">To</span>
+        <input type="text" id="forward-to" class="compose-field-input" placeholder="転送先メールアドレス"
+          oninput="onAddressInput(this)"
+          onkeydown="onAddressKeydown(event,this)"
+          onblur="setTimeout(hideSuggestions,150)">
+      </div>
+      <div class="compose-field-row" id="forward-cc-row">
+        <span class="compose-field-label">CC</span>
+        <input type="text" id="forward-cc" class="compose-field-input" placeholder="カンマ区切りで複数入力可"
+          oninput="onAddressInput(this)"
+          onkeydown="onAddressKeydown(event,this)"
+          onblur="setTimeout(hideSuggestions,150)">
+      </div>
+      <div class="compose-field-row" id="forward-bcc-row">
+        <span class="compose-field-label">BCC</span>
+        <input type="text" id="forward-bcc" class="compose-field-input" placeholder="カンマ区切りで複数入力可"
+          oninput="onAddressInput(this)"
+          onkeydown="onAddressKeydown(event,this)"
+          onblur="setTimeout(hideSuggestions,150)">
+      </div>
+      <label style="font-size:13px;font-weight:bold;margin-top:8px">コメント（任意）</label>
+      <textarea id="forward-body" class="compose-new-body" placeholder="転送メッセージに追加するコメント..." style="height:80px"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeForwardModal()">キャンセル</button>
+      <button class="btn-save" onclick="sendForward()">転送</button>
     </div>
   </div>
 </div>
