@@ -1,6 +1,10 @@
 # Chatmail
 
-Gmail as a chat UI — like LINE or WhatsApp, but for email.
+**Email's UI is broken. Not the technology — the interface.**
+
+Every Gmail thread is a wall of quoted text, headers, and signatures. You just want to know what Bob said. Instead you get three "Please see below" and Bob's reply buried somewhere in the middle.
+
+Chatmail strips all that away. It's Gmail, but it looks like a chat.
 
 ## Features
 
@@ -64,6 +68,8 @@ In Settings, enter your **Claude API key** (or OpenAI-compatible key) to use:
 If you find Chatmail useful, consider buying me a coffee ☕
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-yellow?logo=buy-me-a-coffee)](https://buymeacoffee.com/fireshitair)
+
+**A note on supporting:** I'm a developer in Japan. Due to the weak yen, a $5 donation goes about 1.5× further than it looks. If Chatmail saves you time, buying me a coffee in dollars is genuinely appreciated.
 
 ## License
 
