@@ -71,6 +71,10 @@ If you find Chatmail useful, consider buying me a coffee ☕
 
 **A note on supporting:** I'm a developer in Japan. Due to the weak yen, a $5 donation goes about 1.5× further than it looks. If Chatmail saves you time, buying me a coffee in dollars is genuinely appreciated.
 
+## Legal
+
+[特定商取引法に基づく表記](LEGAL.md)
+
 ## License
 
 MIT
