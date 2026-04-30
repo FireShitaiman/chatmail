@@ -1,3 +1,5 @@
 node_modules/
 dist/
-main.mjs
+.claude/
+CLAUDE.md
+*.png

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,25 +16,31 @@
         <div class="app-name">Chatmail</div>
         <span class="refresh-indicator" id="refresh-indicator"></span>
       </div>
-      <div style="display:flex;gap:2px">
-        <button class="btn-icon" onclick="openCompose()" title="新規メール">&#9998;</button>
-        <button class="btn-icon" onclick="openSettings()" title="設定">&#9881;</button>
+      <div style="display:flex;gap:2px;align-items:center">
+        <button class="btn-theme-toggle" id="btn-theme-toggle" onclick="toggleTheme()" title="Toggle theme">☀ Light</button>
+        <button class="btn-icon" onclick="openCompose()" title="New email">&#9998;</button>
+        <button class="btn-icon" onclick="openSettings()" title="Settings">&#9881;</button>
       </div>
     </div>
     <div class="account-email" id="account-email"></div>
     <div class="search-box">
       <span class="search-icon">&#128269;</span>
-      <input type="text" placeholder="検索" oninput="filterContacts(this.value)">
+      <input type="text" id="search-input" placeholder="Search (Enter for full search)"
+        oninput="onSearchInput(this)"
+        onkeydown="onSearchKeydown(event, this)">
+      <button id="search-clear-btn" class="search-clear-btn" onclick="clearSearch()" style="display:none" title="Clear search">&#10005;</button>
     </div>
   </div>
   <div class="inbox-tabs">
-    <button class="inbox-tab active" id="tab-inbox" onclick="switchView('inbox')">受信トレイ</button>
-    <button class="inbox-tab" id="tab-tasks" onclick="switchView('tasks')">タスク</button>
-    <button class="inbox-tab" id="tab-trash" onclick="switchView('trash')">迷惑・ゴミ箱</button>
+    <button class="inbox-tab active" id="tab-inbox" onclick="switchView('inbox')">Inbox</button>
+    <button class="inbox-tab" id="tab-tasks" onclick="switchView('tasks')">Tasks</button>
+    <button class="inbox-tab" id="tab-trash" onclick="switchView('trash')">Spam &amp; Trash</button>
   </div>
   <div class="filter-row" id="filter-row">
-    <button class="btn-filter-scan" id="btn-filter-scan" onclick="scanFilter()">🤖 広告・不要メールを探す</button>
-    <span class="filter-badge hidden" id="filter-badge">0</span>
+    <label class="filter-mode-label" title="Use AI for detection (requires API key)">
+      <input type="checkbox" id="filter-ai-toggle" checked onchange="saveFilterMode()"> AI
+    </label>
+    <button class="btn-filter-scan" id="btn-filter-scan" onclick="scanFilter()">🤖 Scan</button>
   </div>
   <div class="contact-list" id="contact-list"></div>
 </div>
@@ -47,12 +53,10 @@
     <div class="avatar" id="header-avatar" style="background:#4f6ef7">-</div>
     <div class="chat-header-info">
       <h2 id="header-name">Chatmail</h2>
-      <p id="header-email">左のリストから相手を選択</p>
+      <p id="header-email">Select a contact from the list</p>
     </div>
     <div style="display:flex;gap:4px;align-items:center">
-      <button class="btn-icon" id="btn-forward" style="display:none" onclick="openForward()" title="転送">&#8618;</button>
-      <button class="btn-icon" id="btn-add-task" style="display:none" onclick="openAddTaskDialog()" title="タスクに追加">&#10003;</button>
-      <button class="btn-icon" onclick="openSettings()" title="設定">&#9881;</button>
+      <button class="btn-icon" id="btn-header-settings" onclick="openContactSettings()" title="Contact settings" style="display:none">&#9881;</button>
     </div>
   </div>
 
@@ -63,58 +67,144 @@
 
     <!-- COMPOSE -->
     <div class="compose-area">
-      <div class="ai-loading" id="ai-loading">
-        <span>AIが考えています</span>
-        <div class="dot-anim"><span></span><span></span><span></span></div>
-      </div>
 
-      <div class="ai-suggestion" id="ai-suggestion">
-        <div class="ai-suggestion-label">✦ AI提案</div>
-        <div class="ai-suggestion-text" id="ai-suggestion-text"></div>
-        <div class="ai-suggestion-actions">
-          <button class="btn-adopt" onclick="adoptSuggestion()">これで送る</button>
-          <button class="btn-discard" onclick="discardSuggestion()">破棄</button>
+      <!-- Task detail panel (visible in tasks view) -->
+      <div id="task-detail-panel">
+        <div class="tdp-placeholder" id="tdp-placeholder">Select a task</div>
+        <div class="tdp-content" id="tdp-content" style="display:none">
+          <div class="tdp-header">
+            <div class="tdp-avatar" id="tdp-avatar">?</div>
+            <div class="tdp-info">
+              <div class="tdp-name" id="tdp-contact"></div>
+              <div class="tdp-subject" id="tdp-subject"></div>
+            </div>
+          </div>
+          <div class="tdp-snippet" id="tdp-snippet"></div>
+          <label class="tdp-label">Notes</label>
+          <textarea id="tdp-memo" class="tdp-memo" placeholder="Add notes..."></textarea>
+          <div class="tdp-actions">
+            <button class="btn-cancel tdp-btn-delete" onclick="deleteCurrentTask()">&#128465; Delete</button>
+            <button class="btn-tone" onclick="jumpFromTaskDetail()">Open email &#8594;</button>
+            <button class="btn-send" onclick="saveCurrentTask()">Save</button>
+          </div>
         </div>
       </div>
 
-      <div class="reply-cc-row hidden" id="reply-cc-row">
-        <input type="checkbox" class="sig-checkbox" id="reply-cc-checkbox" checked>
-        <span class="reply-cc-label">CC</span>
-        <span id="reply-cc-text"></span>
+      <!-- Task side panel (shown when task button is clicked on a message) -->
+      <div id="task-side-panel">
+        <div class="tsp-header">
+          <span class="tsp-title">Tasks</span>
+          <button class="tsp-close-btn" onclick="closeTaskSidePanel()">×</button>
+        </div>
+        <div id="tsp-list" class="tsp-list"></div>
       </div>
 
-      <div class="compose-box">
-        <div class="template-block hidden" id="template-greeting">
-          <input type="checkbox" class="sig-checkbox" id="greeting-checkbox" checked onchange="updateGreetingVisual()">
-          <span class="sig-text" id="greeting-text"></span>
+      <!-- Reply area -->
+      <div id="compose-inner">
+        <div class="ai-loading" id="ai-loading">
+          <span>AI is thinking</span>
+          <div class="dot-anim"><span></span><span></span><span></span></div>
         </div>
-        <textarea
-          class="compose-input"
-          id="compose-input"
-          placeholder="本文を入力..."
-          oninput="onInputChange(this)"
-          onkeydown="onKeyDown(event)"
-          disabled
-        ></textarea>
-        <div class="template-block bottom hidden" id="template-signature">
-          <input type="checkbox" class="sig-checkbox" id="sig-checkbox" checked onchange="updateSigVisual()">
-          <span class="sig-text" id="sig-text"></span>
-        </div>
-      </div>
 
-      <div class="attachment-list" id="reply-attachment-list"></div>
-      <input type="file" id="file-input-reply" multiple style="display:none" onchange="handleFileInputChange(event,'reply')">
-
-      <div class="compose-toolbar">
-        <div class="tone-buttons" id="tone-buttons">
-          <button class="btn-tone" onclick="adjustTone('丁寧に')">丁寧に</button>
-          <button class="btn-tone" onclick="adjustTone('フランクに')">フランクに</button>
-          <button class="btn-tone" onclick="adjustTone('短く')">短く</button>
+        <div class="ai-suggestion" id="ai-suggestion">
+          <div class="ai-suggestion-label">✦ AI Suggestion</div>
+          <div class="ai-suggestion-text" id="ai-suggestion-text"></div>
+          <div class="ai-suggestion-actions">
+            <button class="btn-adopt" onclick="adoptSuggestion()">Use this</button>
+            <button class="btn-discard" onclick="discardSuggestion()">Discard</button>
+          </div>
         </div>
-        <div class="right-actions">
-          <button class="btn-attach" onclick="document.getElementById('file-input-reply').click()" title="ファイルを添付">&#128206;</button>
-          <button class="btn-ai" id="btn-ai" onclick="triggerAI()">✦ AIに書かせる</button>
-          <button class="btn-send" onclick="sendMessage()">送信</button>
+
+        <!-- Recipient header (collapsible) -->
+        <div class="reply-header-bar" id="reply-header-bar" style="display:none">
+          <button class="reply-header-toggle-btn" onclick="toggleReplyHeader()">
+            <span class="reply-field-label" id="reply-header-to-label">To</span>
+            <span class="reply-header-to-text" id="reply-header-to-text">—</span>
+            <span class="reply-header-chevron" id="reply-header-chevron">▾</span>
+          </button>
+        </div>
+        <div class="reply-header-fields hidden" id="reply-header-fields">
+          <!-- To field (forward / new mail mode) -->
+          <div class="reply-field-row" id="reply-to-row" style="display:none">
+            <span class="reply-field-label">To</span>
+            <input type="text" class="reply-field-input" id="reply-to-input" placeholder="Recipient email"
+              oninput="onAddressInput(this)"
+              onkeydown="onAddressKeydown(event,this)"
+              onblur="onReplyToBlur()">
+          </div>
+          <!-- Subject field (new mail mode only) -->
+          <div class="reply-field-row" id="new-mail-subject-row" style="display:none">
+            <span class="reply-field-label">Subject</span>
+            <input type="text" class="reply-field-input" id="new-mail-subject-input" placeholder="Subject">
+          </div>
+          <div class="reply-field-row">
+            <span class="reply-field-label">CC</span>
+            <input type="text" class="reply-field-input" id="reply-cc-input" placeholder="Comma-separated emails"
+              oninput="onAddressInput(this)"
+              onkeydown="onAddressKeydown(event,this)"
+              onblur="setTimeout(hideSuggestions,150)">
+          </div>
+          <div class="reply-field-row">
+            <span class="reply-field-label">BCC</span>
+            <input type="text" class="reply-field-input" id="reply-bcc-input" placeholder="Comma-separated emails"
+              oninput="onAddressInput(this)"
+              onkeydown="onAddressKeydown(event,this)"
+              onblur="setTimeout(hideSuggestions,150)">
+          </div>
+        </div>
+
+        <div id="compose-subject-display" class="compose-subject-display hidden"></div>
+
+        <div class="reply-context-bar hidden" id="reply-context-bar">
+          <div class="reply-context-inner">
+            <span class="reply-context-arrow">↩</span>
+            <div class="reply-context-content">
+              <span class="reply-context-sender" id="reply-context-sender"></span>
+              <span class="reply-context-snippet" id="reply-context-snippet"></span>
+            </div>
+          </div>
+          <button class="reply-context-clear" onclick="clearReplyContext()" title="Clear reply target">×</button>
+        </div>
+
+        <div class="compose-box">
+          <div class="template-block hidden" id="template-greeting">
+            <input type="checkbox" class="sig-checkbox" id="greeting-checkbox" checked onchange="updateGreetingVisual()">
+            <span class="sig-text" id="greeting-text"></span>
+          </div>
+          <textarea
+            class="compose-input"
+            id="compose-input"
+            placeholder="Write your message..."
+            oninput="onInputChange(this)"
+            onkeydown="onKeyDown(event)"
+            disabled
+          ></textarea>
+          <div class="template-block bottom hidden" id="template-signature">
+            <input type="checkbox" class="sig-checkbox" id="sig-checkbox" checked onchange="updateSigVisual()">
+            <span class="sig-text" id="sig-text"></span>
+          </div>
+        </div>
+
+        <div class="attachment-list" id="reply-attachment-list"></div>
+        <input type="file" id="file-input-reply" multiple style="display:none" onchange="handleFileInputChange(event,'reply')">
+
+        <!-- Forwarded message quote (forward mode only) -->
+        <div id="forward-quoted-area" class="forward-quoted-area hidden">
+          <div class="forward-quoted-label">--- Forwarded message ---</div>
+          <div id="forward-quoted-preview" class="forward-quoted-preview"></div>
+        </div>
+
+        <div class="compose-toolbar">
+          <div class="tone-buttons" id="tone-buttons">
+            <button class="btn-tone" onclick="adjustTone('Formal')">Formal</button>
+            <button class="btn-tone" onclick="adjustTone('Casual')">Casual</button>
+            <button class="btn-tone" onclick="adjustTone('Shorter')">Shorter</button>
+          </div>
+          <div class="right-actions">
+            <button class="btn-attach" onclick="document.getElementById('file-input-reply').click()" title="Attach file">&#128206;</button>
+            <button class="btn-ai" id="btn-ai" onclick="triggerAI()">✦ Write with AI</button>
+            <button class="btn-send" onclick="sendMessage()">Send</button>
+          </div>
         </div>
       </div>
     </div>
@@ -122,76 +212,97 @@
 </div>
 
 <!-- SETTINGS MODAL -->
-<div class="modal-overlay" id="modal-overlay" onclick="closeSettings(event)">
+<div class="modal-overlay" id="modal-overlay">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h3>設定</h3>
+      <h3>Settings</h3>
       <button class="btn-icon" onclick="closeSettings()">&#10005;</button>
     </div>
     <div class="modal-body">
 
-      <!-- Gmail 認証 -->
+      <!-- Gmail auth -->
       <div class="modal-section">
-        <label>Gmail 連携</label>
+        <label>Gmail</label>
         <input type="text"     class="api-key-input" id="modal-client-id"     placeholder="Google Client ID">
         <input type="password" class="api-key-input" id="modal-client-secret"  placeholder="Google Client Secret">
         <div class="gmail-actions">
-          <button class="btn-gmail primary" id="btn-gmail-connect" onclick="connectGmail()">Gmailに接続</button>
-          <button class="btn-gmail" id="btn-gmail-signout" style="display:none" onclick="signoutGmail()">接続解除</button>
-          <button class="btn-gmail" onclick="reloadInbox()">&#8635; 更新</button>
+          <button class="btn-gmail primary" id="btn-gmail-connect" onclick="connectGmail()">Connect to Gmail</button>
+          <button class="btn-gmail" id="btn-gmail-signout" style="display:none" onclick="signoutGmail()">Disconnect</button>
+          <button class="btn-gmail" onclick="reloadInbox()">&#8635; Refresh</button>
         </div>
         <div class="api-key-status" id="gmail-status"></div>
         <p class="modal-hint">
-          Google Cloud Console で「デスクトップアプリ」タイプの OAuth クライアント ID を作成し、<br>
-          リダイレクト URI に <code>http://localhost:3000/oauth/callback</code> を追加してください。<br>
-          <a onclick="openGCPHelp()">設定手順を開く &#8599;</a>
+          Create a <strong>Desktop app</strong> OAuth client ID in Google Cloud Console.<br>
+          Add <code>http://localhost:3000/oauth/callback</code> as a redirect URI.<br>
+          <a onclick="openGCPHelp()">Open setup guide &#8599;</a>
         </p>
       </div>
 
-      <!-- 冒頭文 -->
-      <div class="modal-section" id="greeting-section" style="display:none">
-        <label id="greeting-label">冒頭文（この相手専用）</label>
-        <textarea id="modal-greeting" placeholder="例）田中様&#10;いつもお世話になっております。&#10;" rows="3"></textarea>
-        <p class="modal-hint">返信ボックスの先頭に自動で挿入されます。未入力の場合は挿入されません。</p>
-      </div>
-
-      <!-- 署名 -->
+      <!-- AI settings -->
       <div class="modal-section">
-        <label>署名（全メールに付加）</label>
-        <textarea id="modal-signature" placeholder="例）株式会社ABC&#10;営業部 山田 太郎&#10;tel: 03-xxxx-xxxx" rows="4"></textarea>
-        <p class="modal-hint">送信メールの末尾に自動で付加されます。未入力の場合は付加されません。</p>
-      </div>
-
-      <!-- Claude APIキー -->
-      <div class="modal-section">
-        <label>Claude APIキー</label>
-        <input type="password" class="api-key-input" id="modal-apikey" placeholder="sk-ant-...">
+        <label>AI (Reply Generation)</label>
+        <select class="api-key-input" id="modal-llm-type" onchange="onLlmTypeChange()" style="margin-bottom:6px">
+          <option value="claude">Claude (Anthropic)</option>
+          <option value="openai">OpenAI Compatible (GPT / Gemini / Local, etc.)</option>
+        </select>
+        <div style="display:flex;gap:4px;margin-bottom:4px">
+          <input type="password" class="api-key-input" id="modal-apikey" placeholder="API Key" style="flex:1">
+          <button class="btn-load-models" id="btn-load-models" onclick="loadAvailableModels()" title="Fetch available models">Load Models</button>
+        </div>
+        <select class="api-key-input" id="modal-llm-model-select" style="margin-bottom:4px;display:none"></select>
+        <input type="text" class="api-key-input" id="modal-llm-model" placeholder="Model name (e.g., gpt-4o, gemini-1.5-flash)" style="margin-bottom:4px">
+        <input type="text" class="api-key-input" id="modal-llm-endpoint" placeholder="Endpoint URL (default: https://api.openai.com/v1)" id="modal-llm-endpoint-field">
         <div class="api-key-status" id="apikey-status"></div>
       </div>
 
-      <!-- 自動フィルター -->
+      <!-- Auto filter -->
       <div class="modal-section">
-        <label>広告メール自動フィルター</label>
+        <label>Auto Spam Filter</label>
         <div class="toggle-row">
           <input type="checkbox" id="modal-auto-filter" checked>
-          <span>「ゴミ箱へ移動」した送信者を次回から自動でブロック</span>
+          <span>Auto-block senders you've moved to trash</span>
         </div>
         <p class="modal-hint">
-          ブロック済み: <span id="blocklist-count">0</span>件
-          <a onclick="toggleBlocklistDetail()" id="blocklist-toggle-link" style="cursor:pointer;color:#4f6ef7;margin-left:8px">▶ 管理</a>
+          Blocked: <span id="blocklist-count">0</span>
+          <a onclick="toggleBlocklistDetail()" id="blocklist-toggle-link" style="cursor:pointer;color:#4f6ef7;margin-left:8px">▶ Manage</a>
         </p>
         <div id="blocklist-detail" style="display:none">
           <div id="blocklist-entries" class="blocklist-entries"></div>
-          <p class="modal-hint" style="margin-top:6px"><a onclick="clearBlocklist()" style="cursor:pointer;color:#e8605a">すべてリセット</a></p>
+          <p class="modal-hint" style="margin-top:6px"><a onclick="clearBlocklist()" style="cursor:pointer;color:#e8605a">Reset all</a></p>
         </div>
         <p class="modal-hint" style="margin-top:8px">
-          Gmail側のフィルタールールはアプリに反映されません。<a onclick="window.electronAPI.openExternal('https://mail.google.com/mail/u/0/#settings/filters')" style="cursor:pointer;color:#4f6ef7">Gmailのフィルター設定を開く →</a>
+          Gmail filter rules are not reflected here. <a onclick="window.electronAPI.openExternal('https://mail.google.com/mail/u/0/#settings/filters')" style="cursor:pointer;color:#4f6ef7">Open Gmail filter settings →</a>
         </p>
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn-cancel" onclick="closeSettings()">閉じる</button>
-      <button class="btn-save" onclick="saveSettings()">保存</button>
+      <button class="btn-save" onclick="saveSettings()">Save & Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONTACT SETTINGS MODAL -->
+<div class="modal-overlay" id="contact-settings-overlay" onclick="closeContactSettings(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="contact-settings-title">Settings</h3>
+      <button class="btn-icon" onclick="closeContactSettings()">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-section">
+        <label id="cs-greeting-label">Greeting (for this contact)</label>
+        <textarea id="cs-greeting" placeholder="e.g., Hi John,&#10;Hope you're doing well.&#10;" rows="3"></textarea>
+        <p class="modal-hint">Automatically inserted at the top of your reply. Leave blank to disable.</p>
+      </div>
+      <div class="modal-section">
+        <label>Signature</label>
+        <textarea id="cs-signature" placeholder="e.g., John Doe&#10;ABC Corp&#10;tel: +1-xxx-xxxx" rows="4"></textarea>
+        <p class="modal-hint">Applied to all chats. Appended to the end of sent emails. Leave blank to disable.</p>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeContactSettings()">Close</button>
+      <button class="btn-save" onclick="saveContactSettings()">Save</button>
     </div>
   </div>
 </div>
@@ -200,13 +311,13 @@
 <div class="modal-overlay" id="compose-overlay" onclick="closeCompose(event)">
   <div class="modal compose-modal" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h3>新規メール</h3>
+      <h3>New Email</h3>
       <button class="btn-icon" onclick="closeCompose()">&#10005;</button>
     </div>
     <div class="modal-body" style="gap:0;padding:0 20px 16px">
       <div class="compose-field-row">
         <span class="compose-field-label">To</span>
-        <input type="text" id="compose-to" class="compose-field-input" placeholder="宛先メールアドレス"
+        <input type="text" id="compose-to" class="compose-field-input" placeholder="Recipient email"
           oninput="onAddressInput(this)"
           onkeydown="onAddressKeydown(event,this)"
           onblur="setTimeout(hideSuggestions,150)">
@@ -214,23 +325,23 @@
       </div>
       <div class="compose-field-row" id="compose-cc-row" style="display:none">
         <span class="compose-field-label">CC</span>
-        <input type="text" id="compose-cc" class="compose-field-input" placeholder="カンマ区切りで複数入力可"
+        <input type="text" id="compose-cc" class="compose-field-input" placeholder="Comma-separated emails"
           oninput="onAddressInput(this)"
           onkeydown="onAddressKeydown(event,this)"
           onblur="setTimeout(hideSuggestions,150)">
       </div>
       <div class="compose-field-row" id="compose-bcc-row" style="display:none">
         <span class="compose-field-label">BCC</span>
-        <input type="text" id="compose-bcc" class="compose-field-input" placeholder="カンマ区切りで複数入力可"
+        <input type="text" id="compose-bcc" class="compose-field-input" placeholder="Comma-separated emails"
           oninput="onAddressInput(this)"
           onkeydown="onAddressKeydown(event,this)"
           onblur="setTimeout(hideSuggestions,150)">
       </div>
       <div class="compose-field-row">
-        <span class="compose-field-label">件名</span>
-        <input type="text" id="compose-subject" class="compose-field-input" placeholder="件名">
+        <span class="compose-field-label">Subject</span>
+        <input type="text" id="compose-subject" class="compose-field-input" placeholder="Subject">
       </div>
-      <textarea id="compose-body" class="compose-new-body" placeholder="本文を入力..."></textarea>
+      <textarea id="compose-body" class="compose-new-body" placeholder="Write your message..."></textarea>
       <div class="template-block bottom hidden" id="compose-sig-block">
         <input type="checkbox" class="sig-checkbox" id="compose-sig-checkbox" checked onchange="updateComposeSig()">
         <span class="sig-text" id="compose-sig-text"></span>
@@ -239,93 +350,42 @@
       <input type="file" id="file-input-compose" multiple style="display:none" onchange="handleFileInputChange(event,'compose')">
     </div>
     <div class="modal-footer" style="justify-content:space-between">
-      <button class="btn-attach" onclick="document.getElementById('file-input-compose').click()" title="ファイルを添付">&#128206;</button>
+      <button class="btn-attach" onclick="document.getElementById('file-input-compose').click()" title="Attach file">&#128206;</button>
       <div style="display:flex;gap:8px">
-        <button class="btn-cancel" onclick="closeCompose()">キャンセル</button>
-        <button class="btn-save" id="compose-send-btn" onclick="sendNewMail()">送信</button>
+        <button class="btn-cancel" onclick="closeCompose()">Cancel</button>
+        <button class="btn-save" id="compose-send-btn" onclick="sendNewMail()">Send</button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- TASK MODAL (Add/Edit) -->
-<div class="modal-overlay" id="task-modal-overlay" onclick="closeTaskModal(event)">
-  <div class="modal" onclick="event.stopPropagation()">
-    <div class="modal-header">
-      <h3 id="task-modal-title">タスクに追加</h3>
-      <button class="btn-icon" onclick="closeTaskModal()">&#10005;</button>
-    </div>
-    <div class="modal-body" style="gap:8px">
-      <div id="task-info-display" style="padding:8px;background:#f5f5f5;border-radius:4px;font-size:12px">
-        <div style="font-weight:bold" id="task-contact-name"></div>
-        <div style="color:#666" id="task-subject"></div>
-      </div>
-      <label style="font-size:13px;font-weight:bold">メモ（任意）</label>
-      <textarea id="task-memo" class="compose-new-body" placeholder="このメールについてのメモを入力..." style="height:120px"></textarea>
-    </div>
-    <div class="modal-footer">
-      <button class="btn-cancel" onclick="closeTaskModal()">キャンセル</button>
-      <button class="btn-save" onclick="saveTask()">タスクに追加</button>
-    </div>
-  </div>
-</div>
-
-<!-- FORWARD MODAL -->
-<div class="modal-overlay" id="forward-overlay" onclick="closeForwardModal(event)">
-  <div class="modal compose-modal" onclick="event.stopPropagation()">
-    <div class="modal-header">
-      <h3>メールを転送</h3>
-      <button class="btn-icon" onclick="closeForwardModal()">&#10005;</button>
-    </div>
-    <div class="modal-body" style="gap:0;padding:0 20px 16px">
-      <div class="compose-field-row">
-        <span class="compose-field-label">To</span>
-        <input type="text" id="forward-to" class="compose-field-input" placeholder="転送先メールアドレス"
-          oninput="onAddressInput(this)"
-          onkeydown="onAddressKeydown(event,this)"
-          onblur="setTimeout(hideSuggestions,150)">
-      </div>
-      <div class="compose-field-row" id="forward-cc-row">
-        <span class="compose-field-label">CC</span>
-        <input type="text" id="forward-cc" class="compose-field-input" placeholder="カンマ区切りで複数入力可"
-          oninput="onAddressInput(this)"
-          onkeydown="onAddressKeydown(event,this)"
-          onblur="setTimeout(hideSuggestions,150)">
-      </div>
-      <div class="compose-field-row" id="forward-bcc-row">
-        <span class="compose-field-label">BCC</span>
-        <input type="text" id="forward-bcc" class="compose-field-input" placeholder="カンマ区切りで複数入力可"
-          oninput="onAddressInput(this)"
-          onkeydown="onAddressKeydown(event,this)"
-          onblur="setTimeout(hideSuggestions,150)">
-      </div>
-      <label style="font-size:13px;font-weight:bold;margin-top:8px">コメント（任意）</label>
-      <textarea id="forward-body" class="compose-new-body" placeholder="転送メッセージに追加するコメント..." style="height:80px"></textarea>
-    </div>
-    <div class="modal-footer">
-      <button class="btn-cancel" onclick="closeForwardModal()">キャンセル</button>
-      <button class="btn-save" onclick="sendForward()">転送</button>
-    </div>
-  </div>
-</div>
 
 <!-- FILTER MODAL -->
 <div class="modal-overlay" id="filter-overlay" onclick="closeFilterModal(event)">
   <div class="modal filter-modal" onclick="event.stopPropagation()">
     <div class="modal-header">
-      <h3 id="filter-modal-title">不要メールの候補</h3>
+      <h3 id="filter-modal-title">Spam Candidates</h3>
       <button class="btn-icon" onclick="closeFilterModal()">&#10005;</button>
     </div>
     <div class="filter-modal-body" id="filter-list"></div>
     <div class="modal-footer">
-      <button class="btn-cancel" onclick="closeFilterModal()">キャンセル</button>
-      <button class="btn-save" id="btn-apply-filter" onclick="applyFilter()">ゴミ箱へ移動</button>
+      <button class="btn-cancel" onclick="closeFilterModal()">Cancel</button>
+      <button class="btn-save" id="btn-apply-filter" onclick="applyFilter()">Move to Trash</button>
     </div>
   </div>
 </div>
 
 <div id="toast" class="toast"></div>
 <div id="addr-dropdown" class="addr-dropdown"></div>
-<script src="renderer.js"></script>
+<script src="js/util.js"></script>
+<script src="js/state.js"></script>
+<script src="js/address-book.js"></script>
+<script src="js/contacts.js"></script>
+<script src="js/messages.js"></script>
+<script src="js/compose.js"></script>
+<script src="js/settings.js"></script>
+<script src="js/filter.js"></script>
+<script src="js/tasks.js"></script>
+<script src="js/init.js"></script>
 </body>
 </html>

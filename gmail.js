@@ -182,15 +182,16 @@ ipcMain.handle('gmail:fetch-trash', async (_, { pageToken } = {}) => {
   const gmail = gmailClient();
   if (!gmail) return { ok: false, error: '未認証' };
   try {
-    const listParams = { userId: 'me', maxResults: 30, q: 'in:trash OR in:spam' };
-    if (pageToken) listParams.pageToken = pageToken;
-
-    const [threadsRes, profileRes] = await Promise.all([
-      gmail.users.threads.list(listParams),
+    const [trashRes, spamRes, profileRes] = await Promise.all([
+      gmail.users.threads.list({ userId: 'me', maxResults: 50, includeSpamTrash: true, labelIds: ['TRASH'] }),
+      gmail.users.threads.list({ userId: 'me', maxResults: 50, includeSpamTrash: true, labelIds: ['SPAM'] }),
       gmail.users.getProfile({ userId: 'me' }),
     ]);
     const myEmail = profileRes.data.emailAddress.toLowerCase();
-    const threads = threadsRes.data.threads || [];
+    const seen = new Set();
+    const threads = [...(trashRes.data.threads || []), ...(spamRes.data.threads || [])]
+      .filter(t => { if (seen.has(t.id)) return false; seen.add(t.id); return true; });
+
     const details = await Promise.all(
       threads.map(t =>
         gmail.users.threads.get({
@@ -213,9 +214,13 @@ ipcMain.handle('gmail:fetch-trash', async (_, { pageToken } = {}) => {
       const contactStr = fromEmail.toLowerCase() === myEmail
         ? (getHeader(headers, 'To') || fromHeader) : fromHeader;
       const { name, email } = parseFrom(contactStr);
-      return { threadId: detail.data.id, name, email, subject, preview: subject, time: formatTime(date), unread: false, isSpam };
-    }).filter(Boolean);
-    return { ok: true, contacts, nextPageToken: threadsRes.data.nextPageToken || null };
+      const internalDate = parseInt(lastMsg.internalDate || '0', 10);
+      return { threadId: detail.data.id, name, email, subject, preview: subject, time: formatTime(date), unread: false, isSpam, internalDate };
+    }).filter(Boolean)
+      .sort((a, b) => b.internalDate - a.internalDate)
+      .map(({ internalDate, ...rest }) => rest);
+
+    return { ok: true, contacts, nextPageToken: null };
   } catch (e) {
     return { ok: false, error: e.message };
   }
@@ -329,12 +334,12 @@ function formatDate(dateStr) {
 
 // ===== IPC: FETCH THREADS =====
 
-ipcMain.handle('gmail:fetch-threads', async (_, { pageToken } = {}) => {
+ipcMain.handle('gmail:fetch-threads', async (_, { pageToken, q } = {}) => {
   const gmail = gmailClient();
   if (!gmail) return { ok: false, error: '未認証' };
 
   try {
-    const listParams = { userId: 'me', maxResults: 20, q: 'in:inbox' };
+    const listParams = { userId: 'me', maxResults: 20, q: q || 'in:inbox' };
     if (pageToken) listParams.pageToken = pageToken;
 
     const [threadsRes, profileRes] = await Promise.all([
@@ -413,7 +418,7 @@ ipcMain.handle('gmail:fetch-messages', async (_, { threadId }) => {
       const headers = msg.payload?.headers || [];
       const from = getHeader(headers, 'From');
       const date = getHeader(headers, 'Date');
-      const body = extractPlainText(msg.payload).substring(0, 1200);
+      const body = extractPlainText(msg.payload).substring(0, 8000);
 
       const fromEmail = (from.match(/<(.+?)>/)?.[1] || from).toLowerCase();
       const isSent = fromEmail === myEmail;

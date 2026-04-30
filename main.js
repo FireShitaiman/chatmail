@@ -5,7 +5,7 @@ require('./gmail');
 
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1200,
+    width: 1280,
     height: 800,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -14,6 +14,9 @@ function createWindow() {
     },
   });
   win.loadFile('index.html');
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12') win.webContents.toggleDevTools();
+  });
 }
 
 app.whenReady().then(() => {
