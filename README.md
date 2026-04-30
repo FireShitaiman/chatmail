@@ -59,6 +59,12 @@ In Settings, enter your **Claude API key** (or OpenAI-compatible key) to use:
 - Tone adjustment (Formal / Casual / Shorter)
 - AI spam detection
 
+## Support
+
+If you find Chatmail useful, consider buying me a coffee ☕
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-yellow?logo=buy-me-a-coffee)](https://buymeacoffee.com/fireshitair)
+
 ## License
 
 MIT
