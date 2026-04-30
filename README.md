@@ -28,7 +28,7 @@ Chatmail strips all that away. It's Gmail, but it looks like a chat.
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/ryotaCloudGh/chatmail.git
+git clone https://github.com/FireShitaiman/chatmail.git
 cd chatmail
 npm install
 npm start
