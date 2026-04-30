@@ -1,6 +1,7 @@
 node_modules/
 dist/
+out/
+*.log
+.env
 .claude/
 CLAUDE.md
-TEST_CHECKLIST.md
-*.png
