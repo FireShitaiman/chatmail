@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chatmail — チャット風メールクライアント</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #1a1a1a; background: #fff; }
+    header { background: #1a1a2e; color: #fff; padding: 48px 24px; text-align: center; }
+    header h1 { font-size: 2.4rem; letter-spacing: -0.5px; }
+    header p { margin-top: 12px; font-size: 1.1rem; color: #aab; }
+    section { max-width: 760px; margin: 0 auto; padding: 48px 24px; }
+    h2 { font-size: 1.4rem; margin-bottom: 20px; color: #1a1a2e; }
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 20px; }
+    .feature { border: 1px solid #e8e8e8; border-radius: 8px; padding: 20px; }
+    .feature h3 { font-size: 1rem; margin-bottom: 8px; }
+    .feature p { font-size: 0.9rem; color: #555; line-height: 1.5; }
+    .pricing-box { border: 2px solid #1a1a2e; border-radius: 10px; padding: 32px; text-align: center; max-width: 400px; margin: 0 auto; }
+    .price { font-size: 2rem; font-weight: bold; margin: 16px 0 8px; }
+    .price-note { color: #555; font-size: 0.9rem; margin-bottom: 24px; }
+    .btn { display: inline-block; background: #FFDD00; color: #000; font-weight: bold; padding: 12px 28px; border-radius: 6px; text-decoration: none; font-size: 1rem; }
+    .btn:hover { background: #f0ce00; }
+    .requirements { background: #f8f8f8; border-radius: 8px; padding: 24px; }
+    .requirements ul { padding-left: 20px; }
+    .requirements li { margin-bottom: 8px; font-size: 0.95rem; color: #444; }
+    footer { background: #f0f0f0; text-align: center; padding: 24px; font-size: 0.85rem; color: #666; }
+    footer a { color: #1a1a2e; }
+    hr { border: none; border-top: 1px solid #e8e8e8; margin: 0; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Chatmail</h1>
+  <p>メールをチャットのように。Gmailをチャット風UIで使えるデスクトップアプリ。</p>
+</header>
+
+<section>
+  <h2>サービス概要</h2>
+  <p style="color:#444; line-height:1.7; margin-bottom:32px;">
+    ChatmailはGmailをチャットスレッド形式で表示・操作できるElectronデスクトップアプリケーションです。
+    メールスレッドをチャットUIに変換し、返信・転送・作成を一画面で行えます。
+    オープンソース・無料で利用できます。
+  </p>
+
+  <h2>主な機能</h2>
+  <div class="features" style="margin-bottom:48px;">
+    <div class="feature">
+      <h3>チャット風スレッド表示</h3>
+      <p>Gmailのスレッドをチャット形式で見やすく表示します。</p>
+    </div>
+    <div class="feature">
+      <h3>AI返信支援</h3>
+      <p>Claude / OpenAI APIを使った返信文生成・トーン調整（フォーマル・カジュアル・短縮）。</p>
+    </div>
+    <div class="feature">
+      <h3>スパムフィルター</h3>
+      <p>ルールベース＋AIによるスパム検出・自動振り分け。</p>
+    </div>
+    <div class="feature">
+      <h3>タスク抽出</h3>
+      <p>メール本文からタスクを自動抽出して管理できます。</p>
+    </div>
+    <div class="feature">
+      <h3>アドレス帳</h3>
+      <p>よく使う連絡先を登録・管理できます。</p>
+    </div>
+    <div class="feature">
+      <h3>ダーク/ライトテーマ</h3>
+      <p>環境に合わせてテーマを切り替えられます。</p>
+    </div>
+  </div>
+
+  <h2>動作環境</h2>
+  <div class="requirements" style="margin-bottom:48px;">
+    <ul>
+      <li>Windows / macOS / Linux</li>
+      <li>Node.js 18 以上</li>
+      <li>Google Cloud プロジェクト（Gmail API有効化・OAuthクライアントID）</li>
+      <li>AI機能を使う場合：Claude APIキー または OpenAI互換APIキー（任意）</li>
+    </ul>
+  </div>
+
+  <h2>価格・入手方法</h2>
+  <div class="pricing-box">
+    <div style="font-size:1.1rem; font-weight:bold;">Chatmail</div>
+    <div class="price">無料</div>
+    <div class="price-note">オープンソース（MITライセンス）<br>GitHubから無料でダウンロードできます</div>
+    <a href="https://github.com/FireShitaiman/chatmail" class="btn" style="background:#1a1a2e; color:#fff; margin-bottom:16px; display:block;">GitHubで入手する</a>
+    <hr style="margin: 16px 0;">
+    <p style="font-size:0.85rem; color:#666; margin-bottom:12px;">開発を応援していただける方はこちら（任意）</p>
+    <a href="https://buymeacoffee.com/fireshitair" class="btn">☕ Buy Me a Coffee</a>
+  </div>
+</section>
+
+<hr>
+
+<footer>
+  <p>© 2025 FireShitaiman &nbsp;|&nbsp; <a href="legal.html">特定商取引法に基づく表記</a> &nbsp;|&nbsp; <a href="https://github.com/FireShitaiman/chatmail">GitHub</a></p>
+</footer>
+
+</body>
+</html>
